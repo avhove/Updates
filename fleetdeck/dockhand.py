@@ -231,11 +231,11 @@ class DockhandReader:
         finally:
             self.tasks.pop(target_id, None)
 
-    async def refresh(self) -> None:
-        if time.monotonic() < self.next_poll:
+    async def refresh(self, *, force: bool = False) -> None:
+        if not force and time.monotonic() < self.next_poll:
             return
         async with self.lock:
-            if time.monotonic() < self.next_poll:
+            if not force and time.monotonic() < self.next_poll:
                 return
             # Limit network fan-out, including for malformed or unreachable configured instances.
             sem = asyncio.Semaphore(4)

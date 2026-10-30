@@ -236,7 +236,7 @@ def create_app(
     async def list_targets(refresh: bool = False):
         await inventory.refresh(force=refresh)
         if dockhand is not None:
-            await dockhand.refresh()
+            await dockhand.refresh(force=refresh)
         errors = dict(inventory.errors)
         if cfg.dockhand:
             missing = [m for m in cfg.dockhand.environments if m.target_id not in inventory.targets]

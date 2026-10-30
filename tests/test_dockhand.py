@@ -77,7 +77,11 @@ async def test_reader_only_gets_cached_routes_preserves_history_and_never_follow
     assert result.containers[1].stack == "media"
     assert result.containers[1].status == "update"
     await reader.refresh()
-    assert len(calls) == 2  # dashboard refresh cannot bypass polling interval
+    assert len(calls) == 2  # ordinary dashboard polling respects the interval
+    await reader.refresh(force=True)
+    assert len(calls) == 4  # explicit inventory refresh fetches cached GET status immediately
+    assert all(req.method == "GET" for req in calls)
+    result = reader.status["t1"]
     fail = True
     reader.next_poll = 0
     await reader.refresh()
@@ -85,7 +89,7 @@ async def test_reader_only_gets_cached_routes_preserves_history_and_never_follow
     assert failed.stale and failed.error
     assert failed.synced_at == result.synced_at
     assert failed.containers == result.containers
-    assert len(calls) == 3
+    assert len(calls) == 5
     assert "secret-test-token" not in failed.model_dump_json()
     assert "other.example" not in failed.model_dump_json()
     await reader.aclose()
@@ -166,6 +170,9 @@ def test_status_api_keeps_token_private_and_docker_disabled(tmp_path, monkeypatc
         rejected = client.post("/api/actions", json={"action": "stacks", "target_ids": ["t1"]}).json()
         assert not rejected["jobs"]
         assert "disabled" in rejected["rejected"]["t1"]
+        reader.refresh.assert_awaited_with(force=False)
+        assert client.get("/api/targets?refresh=true").status_code == 200
+        reader.refresh.assert_awaited_with(force=True)
 
 
 def test_demo_never_creates_external_reader(tmp_path):

@@ -546,32 +546,40 @@ a.brand { color: var(--text); text-decoration: none; }
 #docker-settings-dialog input, #docker-settings-dialog select { width: 100%; }
 .discovery-note { font-size: 12px; }
 .dashboard-page .group-head { padding: 11px 16px; }
-.dashboard-page .machine-table { min-width: 1100px; table-layout: fixed; }
-.dashboard-page .machine-table.has-backup { min-width: 1280px; }
-.dashboard-page .machine-table.has-containers { min-width: 1240px; }
-.dashboard-page .machine-table.has-backup.has-containers { min-width: 1420px; }
-.dashboard-page .machine-table col.col-select { width: 36px; }
+.dashboard-page .machine-table { min-width: 980px; table-layout: fixed; }
+.dashboard-page .machine-table.has-backup { min-width: 1100px; }
+.dashboard-page .machine-table.has-containers { min-width: 1080px; }
+.dashboard-page .machine-table.has-backup.has-containers { min-width: 1100px; }
+.dashboard-page .machine-table col.col-select { width: 30px; }
 .dashboard-page .machine-table col.col-machine { width: auto; }
 /* With a spanning scope header, fixed-table layout cannot infer the one auto column
    reliably. Give it an explicit share so names never collapse into the backup column. */
-.dashboard-page .machine-table.has-containers col.col-machine { width: 300px; }
-.dashboard-page .machine-table col.col-backup { width: 120px; }
-.dashboard-page .machine-table col.col-backup-job { width: 44px; }
-.dashboard-page .machine-table col.col-metric { width: 70px; }
+.dashboard-page .machine-table.has-containers col.col-machine { width: 240px; }
+.dashboard-page .machine-table.has-backup.has-containers col.col-machine { width: 160px; }
+.dashboard-page .machine-table col.col-backup { width: 90px; }
+.dashboard-page .machine-table col.col-backup-job { width: 34px; }
+.dashboard-page .machine-table col.col-metric { width: 62px; }
 .dashboard-page .machine-table col.col-status { width: 150px; }
-.dashboard-page .machine-table col.col-update { width: 100px; }
-.dashboard-page .machine-table col.col-reboot { width: 64px; }
-.dashboard-page .machine-table col.col-checked { width: 90px; }
-.dashboard-page .machine-table col.col-info { width: 44px; }
-.dashboard-page .machine-table col.col-more { width: 44px; }
-.dashboard-page .machine-table col.col-containers { width: 120px; }
-.dashboard-page .machine-table > thead > tr > th { white-space: nowrap; }
+.dashboard-page .machine-table col.col-update { width: 94px; }
+.dashboard-page .machine-table col.col-reboot { width: 48px; }
+.dashboard-page .machine-table col.col-checked { width: 80px; }
+.dashboard-page .machine-table col.col-info { width: 36px; }
+.dashboard-page .machine-table col.col-more { width: 36px; }
+.dashboard-page .machine-table col.col-containers { width: 96px; }
+.dashboard-page .machine-table > thead > tr > th { white-space: nowrap; padding-inline: 5px; letter-spacing: 0; }
+.dashboard-page .machine-table > tbody > .machine-row > td { padding-inline: 5px; }
 .dashboard-page .machine-table > tbody > .machine-row > td { height: 56px; padding-top: 8px; padding-bottom: 8px; white-space: nowrap; }
 .dashboard-page .machine-table > tbody > .machine-row > td:first-child { padding-left: 14px; padding-right: 5px; }
 .dashboard-page .machine-table .machine-cell { overflow: visible; font-weight: 600; }
 .dashboard-page .machine-table tr.guest td.machine-cell { padding-left: 12px; }
 .dashboard-page .machine-main { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
 .dashboard-page .machine-meta { display: contents; }
+.dashboard-page .machine-table .machine-main { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 3px 8px; width: 100%; }
+.dashboard-page .machine-table .machine-main > .state { grid-column: 1; grid-row: 1 / 3; align-self: center; }
+.dashboard-page .machine-table .machine-name { grid-column: 2; grid-row: 1; white-space: normal; overflow-wrap: anywhere; }
+.dashboard-page .machine-table .monitor-policy { grid-column: 3; grid-row: 1; }
+.dashboard-page .machine-table .machine-meta { grid-column: 2 / -1; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.dashboard-page .machine-table .machine-os { flex: 1 1 70px; }
 .dashboard-page .mobile-select-label { display: none; }
 .dashboard-page .machine-select { display: inline-flex; align-items: center; gap: 8px; }
 .dashboard-page .machine-main .state { display: inline-flex; align-items: center; }

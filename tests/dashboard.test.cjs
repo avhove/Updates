@@ -53,7 +53,7 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
       return { ok: true, json: async () => body };
     },
     location: { hostname: "localhost", protocol: "http:", pathname: "/" },
-    matchMedia: (query) => query === "(max-width: 900px)" ? mobileQuery : { matches: false }, addEventListener: window.addEventListener.bind(window),
+    matchMedia: (query) => query === "(max-width: 1199px)" ? mobileQuery : { matches: false }, addEventListener: window.addEventListener.bind(window),
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(read("format.js"), context);

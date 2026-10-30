@@ -37,7 +37,11 @@ The token is not returned in the dashboard status API. Configuration remains acc
 the existing authenticated Settings editor, so protect access to that page as before.
 
 Dockhand integration is opt-in and polls only while the dashboard requests inventory, at most
-once per interval per process. Automatic polling uses only `GET /api/containers?env=ID` and
+once per interval per process during ordinary polling. **Refresh inventory** bypasses that
+interval to fetch the latest cached Dockhand reports immediately. This does not start an image
+check or change Dockhand's schedule. Results of checks run by Dockhand appear on the next
+successful sync when exposed by its cached API; missing successful-check history remains unknown.
+Automatic polling and inventory refresh use only `GET /api/containers?env=ID` and
 `GET /api/containers/pending-updates?env=ID`. It never automatically triggers checks, pulls, deployments,
 pruning or restarts. It reads both Compose labels and standalone containers. **Open Dockhand**
 opens the configured manager URL; deployment and self-update stay with that manager.
@@ -76,6 +80,13 @@ authentication/CSRF, mapping restrictions, duplicate starts, complete/partial re
 redirect refusal, cached reconciliation, confirmation/cancellation and simulated demo checks.
 No live Dockhand environment was contacted. Checking state is tested offline; rendered browser
 appearance still needs visual review.
+
+The compact-layout revision places type and OS below machine names, reduces column padding
+and widths, and switches to machine cards below 1200 px. Browser review with simulated machines
+confirmed that machine and expanded container tables fit at 1200 and 1440 px, with cards at
+1199 and 390 px. The refresh revision passed 53 focused backend tests (one skip and one
+platform-specific deselection), all 30 offline UI tests, and Ruff checks. No homelab connection
+or live deployment was used for this verification.
 
 The pending endpoint is not a complete successful-check history. A missing pending record,
 an unsupported older API response or an empty environment inventory must not become **Up to date**.
