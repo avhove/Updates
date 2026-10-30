@@ -9,6 +9,10 @@ Fleetdeck management; an external-link icon means an external manager. Hover or 
 the manager. Clicking the metric expands container details beneath that machine; opening
 details never submits an action. The Containers tab remains available as a fleet-wide view.
 Mobile cards expose the same details and controls without adding selection controls.
+Dockhand containers share one table per machine, with a Stack column sorted alphabetically
+(case-insensitive, natural ordering), then by container name. Containers without Compose
+metadata are labelled Standalone and participate in that same sort. The inline machine
+details and Containers tab use the same table; narrow screens use labelled rows.
 
 For a Dockhand-only installation, keep native Docker checks and management disabled:
 

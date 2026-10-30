@@ -469,10 +469,11 @@ button.login-submit.busy .login-spinner { display: inline-block; }
 .container-detail .docker-host { margin: 0; }
 .container-section-title { padding: 8px 18px 0; }
 .dockhand-table { table-layout: fixed; min-width: 600px; }
-.dockhand-table col.dh-name { width: 25%; }
-.dockhand-table col.dh-image { width: 30%; }
-.dockhand-table col.dh-status { width: 31%; }
-.dockhand-table col.dh-report { width: 14%; }
+.dockhand-table col.dh-name { width: 22%; }
+.dockhand-table col.dh-stack { width: 18%; }
+.dockhand-table col.dh-image { width: 25%; }
+.dockhand-table col.dh-status { width: 25%; }
+.dockhand-table col.dh-report { width: 10%; }
 /* The generic 1% first column is for machine selection, not container names. */
 .dockhand-table th:first-child, .dockhand-table td:first-child { width: auto; }
 .dockhand-table .dockhand-name { font-weight: 500; }

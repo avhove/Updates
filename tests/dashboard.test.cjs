@@ -627,6 +627,9 @@ test("Dockhand works with native Docker disabled and expands escaped standalone 
     dockhand: { synced_at: now, stale: false, error: null, containers: [
       { name: '<script>bad</script>', image: 'example/image:latest', state: 'running', stack: null, status: 'update', checked_at: now },
       { name: 'web', image: 'web:latest', state: 'running', stack: 'media', status: 'unknown' },
+      { name: 'last', image: 'test:latest', state: 'running', stack: 'Zeta', status: 'unknown' },
+      { name: 'alpha-b', image: 'test:latest', state: 'running', stack: 'alpha', status: 'unknown' },
+      { name: 'alpha-a', image: 'test:latest', state: 'running', stack: 'alpha', status: 'unknown' },
     ] },
   } });
   for (const mobile of [false, true]) {
@@ -638,8 +641,10 @@ test("Dockhand works with native Docker disabled and expands escaped standalone 
     assert.equal(ui.document.querySelectorAll('[data-stack]').length, 0);
     ui.click('[data-open-docker="docker"]');
     const detail = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
-    assert.match(detail.textContent, /Standalone containers/);
-    assert.match(detail.textContent, /Compose stack · media/);
+    assert.equal(detail.querySelectorAll('.dockhand-table').length, 1);
+    assert.deepEqual([...detail.querySelectorAll('thead th')].map(c => c.textContent), ['Container', 'Stack', 'Image', 'Status', 'Last report']);
+    assert.deepEqual([...detail.querySelectorAll('td[data-label="Stack"]')].map(c => c.textContent), ['alpha', 'alpha', 'media', 'Standalone', 'Zeta']);
+    assert.deepEqual([...detail.querySelectorAll('.dockhand-name')].slice(0, 2).map(c => c.firstChild.textContent), ['alpha-a', 'alpha-b']);
     assert.match(detail.textContent, /check status unknown/);
     assert.equal(detail.querySelector('script'), null);
     assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
