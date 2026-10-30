@@ -41,8 +41,20 @@ snapshot_keep: 3
 # GitHub, runs it as root, and can upgrade the app itself. Set false and the job only warns.
 community_scripts_update: true
 # This fork defaults to an OS-only dashboard. Enable only if Fleetdeck should also manage Docker.
-# false hides Docker UI, skips capability/image checks, and rejects Docker API jobs.
+# false skips native capability/image checks and rejects Docker API jobs.
+# Docker UI stays hidden unless this or the independent Dockhand status integration is configured.
 docker_enabled: false
+# Optional, read-only Dockhand status. Keep docker_enabled false when Dockhand manages all containers.
+# Uses GET only; never triggers Dockhand checks, pulls, updates or restarts.
+# Use exact Fleetdeck target IDs from the authenticated /api/targets response, not display names.
+# Configured mappings always block native Docker jobs on those targets, even with docker_enabled true.
+# dockhand:
+#   url: https://dockhand.example
+#   token: ${FLEETDECK_DOCKHAND_TOKEN}
+#   poll_seconds: 300
+#   environments:
+#     - target_id: ssh:docker-host
+#       environment_id: 1
 # Such a container then also gets the regular OS upgrade right after, even if the app's own update failed.
 # Encrypt the host config archives of the "Back up" button to this age public key (age1...). Only
 # the matching private key, which you keep in your password manager, opens them; the dashboard never

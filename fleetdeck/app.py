@@ -21,6 +21,7 @@ from .backup_runs import check_destination
 from .config import AppConfig, config_path, load_config
 from .console import Console
 from .console_routes import add_console_routes
+from .dockhand import DockhandReader, DockhandStatus, demo_status
 from .inventory import Inventory, build_providers
 from .jobs import JobManager
 from .models import CheckResult, DockerSettings, Job, JobAction, StacksResult, Target
@@ -53,6 +54,7 @@ class TargetView(BaseModel):
     docker_settings: DockerSettings = Field(default_factory=DockerSettings)
     # Configured monitor-only, including restrictions retained from legacy dashboard overrides.
     monitor_only: bool = False
+    dockhand: DockhandStatus | None = None
 
 
 class ActionRequest(BaseModel):
@@ -135,6 +137,14 @@ def create_app(
         cfg.backup_age_recipient,
         cfg.backup_password,
         docker_enabled=cfg.docker_enabled,
+        dockhand_targets={m.target_id: cfg.dockhand.url for m in cfg.dockhand.environments} if cfg.dockhand else {},
+    )
+    # Demo mode must never contact a configured external manager.
+    dockhand = DockhandReader(cfg.dockhand) if cfg.dockhand and not cfg.demo and not locked else None
+    demo_dockhand = (
+        {m.target_id: demo_status(cfg.dockhand.url) for m in cfg.dockhand.environments}
+        if cfg.demo and cfg.dockhand
+        else {}
     )
     notifier = Notifier(cfg.notify, cfg.public_url) if cfg.notify else None
     scheduler = Scheduler(
@@ -188,6 +198,8 @@ def create_app(
             watchdog.cancel()
         await scheduler.stop()  # first, so it can't queue checks during shutdown
         await jobs.shutdown()
+        if dockhand is not None:
+            await dockhand.aclose()
         if notifier is not None:
             await notifier.aclose()
         for provider in inventory.providers:
@@ -201,6 +213,7 @@ def create_app(
     app.state.jobs = jobs
     app.state.inventory = inventory
     app.state.scheduler = scheduler
+    app.state.dockhand = dockhand
     app.state.setup_token = setup_token
 
     # The login page's cookie; HTTP Basic (scripts, curl -u) keeps working alongside it.
@@ -218,6 +231,8 @@ def create_app(
     @app.get("/api/targets")
     async def list_targets(refresh: bool = False):
         await inventory.refresh(force=refresh)
+        if dockhand is not None:
+            await dockhand.refresh()
         views = [
             TargetView(
                 target=t,
@@ -229,6 +244,7 @@ def create_app(
                 runs_dashboard=_runs_dashboard(t, check, hostname),
                 docker_settings=jobs.get_docker_settings(t.id),
                 monitor_only=jobs.monitor_only(t),
+                dockhand=dockhand.status.get(t.id) if dockhand is not None else demo_dockhand.get(t.id),
             )
             for t, _ in inventory.targets.values()
         ]
@@ -241,6 +257,7 @@ def create_app(
                 "snapshot_before_upgrade": cfg.snapshot_before_upgrade,
                 "community_scripts_update": cfg.community_scripts_update,
                 "docker_enabled": cfg.docker_enabled,
+                "containers_visible": bool(cfg.docker_enabled or cfg.dockhand),
             },
         }
 

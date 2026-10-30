@@ -1,5 +1,90 @@
 # OS-focused dashboard preview
 
+## Container status and Dockhand (optional)
+
+The dashboard keeps the **Update** button. Its scope is OS packages, identified by the
+**Operating system** group heading and the update confirmation. The separate **Containers**
+column uses a blue boxes-and-count metric, aligned with Security/Package. A server icon means
+Fleetdeck management; an external-link icon means an external manager. Hover or focus names
+the manager. Clicking the metric expands container details beneath that machine; opening
+details never submits an action. The Containers tab remains available as a fleet-wide view.
+Mobile cards expose the same details and controls without adding selection controls.
+
+For a Dockhand-only installation, keep native Docker checks and management disabled:
+
+```yaml
+docker_enabled: false
+dockhand:
+  url: https://dockhand.example
+  token: ${FLEETDECK_DOCKHAND_TOKEN}
+  poll_seconds: 300
+  environments:
+    - target_id: your-exact-fleetdeck-target-id
+      environment_id: 1
+```
+
+Replace the example target ID with an exact ID from the authenticated `/api/targets` response,
+and use the environment ID from Dockhand. Names and addresses are never used to guess a match.
+Supply the token in the server environment, never in frontend code. Normal TLS verification
+stays enabled; redirects are rejected so the bearer token cannot follow a different origin.
+Create a dedicated Dockhand token with the least permissions supported by your installation.
+The token is not returned in the dashboard status API. Configuration remains accessible through
+the existing authenticated Settings editor, so protect access to that page as before.
+
+Dockhand integration is opt-in and polls only while the dashboard requests inventory, at most
+once per interval per process. Its only remote calls are `GET /api/containers?env=ID` and
+`GET /api/containers/pending-updates?env=ID`. It never triggers checks, pulls, deployments,
+pruning or restarts. It reads both Compose labels and standalone containers. **Open Dockhand**
+opens the configured manager URL; deployment and self-update stay with that manager.
+
+The pending endpoint is not a complete successful-check history. A missing pending record,
+an unsupported older API response or an empty environment inventory must not become **Up to date**.
+The detail table explicitly says **No pending update reported · check status unknown**.
+Version/pinned-digest advisories, policy exclusions and deferred updates are separate statuses;
+only explicit `hasImageUpdate: true` records outside cooldown count as updates. Report times
+describe Dockhand's cached records, not a new registry check by Fleetdeck. Poll failures retain
+the last successful inventory in memory with a stale notice and a `?` metric; this cache is
+cleared on restart. No source error bodies or tokens are sent to the browser.
+
+For mixed management, explicitly enable `docker_enabled: true` for Fleetdeck's existing native
+features, and map Dockhand hosts as above. Configured mappings override saved per-host settings
+and block native Docker jobs at submission, execution and resume, and skip native discovery.
+They cannot be changed through the per-machine policy dialog. Scheduled and bulk native checks
+exclude those hosts. Existing per-host external/disabled/monitor policies remain enforced.
+Do not enable native management in a Dockhand-only configuration.
+
+Fleetdeck's native implementation still checks Compose stacks only. Its metric counts
+outdated running services, not stacks, and its action remains **Update stack** with the existing
+confirmation and protections. No Compose stacks means `?`, not a healthy zero. Even when a
+Compose result is current, the detail panel states that standalone containers are outside its
+coverage. Rebooting a machine interrupts its containers regardless of manager.
+
+Demo mode never creates a Dockhand HTTP reader or contacts a configured manager. The new
+integration is tested with in-memory HTTP responses and fake machines. No live configuration
+is included, and no deployment is needed to review the source branch.
+
+To review mixed management locally, use the supplied fake-machine config with isolated state:
+
+```sh
+FLEETDECK_CONFIG=config.docker-demo.yaml FLEETDECK_DATA=/tmp/fleetdeck-container-demo \
+  HOST=127.0.0.1 PORT=8081 python -m fleetdeck
+```
+
+This demo explicitly enables native features only on fake executors. `docker-vm` shows
+synthetic Dockhand stack and standalone records, with external links disabled. `pi4` uses
+the existing simulated Compose workflow; run its **Check** and **Fetch image updates** actions
+to populate native status. No Docker installation or Docker socket is needed. Never add real
+hosts, config, keys or production data to this demo.
+
+Branch verification: 205 focused Python tests passed across Dockhand, Docker policies, app,
+configuration, jobs, scheduler, security, setup, stacks, store, backups and repository hygiene.
+Five existing tests skipped; eleven shell/platform-dependent tests were deselected after
+reproducing the macOS boot-ID, port-tool and restricted sudo incompatibilities. All 29 offline
+UI tests passed, including Dockhand with native Docker disabled, desktop/mobile expansion,
+unknown/stale states, escaped source content and no action requests on open. Ruff, JavaScript
+syntax and diff checks passed. Rendered browser appearance still needs a visual review; no
+homelab or live Dockhand endpoint was contacted, and no container image was deployed.
+
 This fork changes the dashboard, not the OS upgrade commands or snapshot implementation.
 
 ## What changes
@@ -109,7 +194,8 @@ Docker management is off by default in this fork, including for existing configu
 docker_enabled: false
 ```
 
-With this setting there is no Containers tab, Docker summary or Docker column/menu item.
+With this setting, and without the optional `dockhand` status integration, there is no
+Containers tab, Docker summary or Docker column/menu item.
 Manual and bulk Docker check/deployment requests are rejected by the server. Scheduled image
 checks are skipped even if an old config has `schedule.check_docker: true`. OS checks do not
 perform the new optional Docker capability discovery.

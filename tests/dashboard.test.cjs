@@ -22,7 +22,7 @@ function machine(id, options = {}) {
   };
 }
 
-async function dashboard({ docker = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
+async function dashboard({ docker = false, containers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
   const { window, document } = parseHTML(read("index.html"));
   const calls = [], errors = [], storage = new Map([["dashboardView", JSON.stringify(rememberedView)]]);
   let activeElement = document.body;
@@ -32,7 +32,7 @@ async function dashboard({ docker = false, targets = [], rememberedView = "machi
   window.HTMLElement.prototype.scrollIntoView = () => {};
   window.HTMLElement.prototype.showModal = function () { this.open = true; };
   window.HTMLElement.prototype.close = function () { this.open = false; };
-  const data = { targets, errors: {}, settings: { docker_enabled: docker, snapshot_before_upgrade: true } };
+  const data = { targets, errors: {}, settings: { docker_enabled: docker, containers_visible: containers, snapshot_before_upgrade: true } };
   const mobileQuery = { matches: mobile, addEventListener: (event, callback) => { mobileQuery.onChange = callback; } };
   const sandbox = {
     window, document, URL, innerWidth: 1200, innerHeight: 800,
@@ -604,8 +604,9 @@ test("optional Docker status is separate, honest about failed checks, and never 
   assert.equal(dockerTable.querySelectorAll("colgroup > col").length, 14);
   assert.equal(ui.document.querySelectorAll("[data-open-docker]").length, 1);
   ui.click('[data-open-docker="docker-vm"]');
-  assert.equal(ui.document.querySelector("#groups").hidden, true);
-  assert.match(ui.document.querySelector("#containers").textContent, /unknown · check failed/);
+  assert.equal(ui.document.querySelector("#groups").hidden, false);
+  assert.match(ui.document.querySelector(".container-detail").textContent, /unknown · check failed/);
+  assert.equal(ui.document.querySelector('[data-open-docker="docker-vm"]').getAttribute('aria-expanded'), 'true');
   assert.equal(ui.document.querySelectorAll("[data-stack]").length, 0);
   assert.equal(ui.calls.some((call) => call.path === "/api/actions"), false);
   ui.click("[data-fetch-docker]");
@@ -618,6 +619,69 @@ test("favicon and clickable Fleetdeck logo are present", async () => {
   assert.equal(ui.document.querySelector('link[rel="icon"]').getAttribute("href"), "/static/favicon.svg");
   assert.equal(ui.document.querySelector("a.brand").getAttribute("href"), "/");
   assert.equal(ui.document.querySelector("a.brand").getAttribute("aria-label"), "Fleetdeck dashboard");
+});
+
+test("Dockhand works with native Docker disabled and expands escaped standalone status without writes", async () => {
+  const target = machine("docker", { view: {
+    docker_settings: { mode: "external", manager_name: "Dockhand", manager_url: "https://dockhand.example" },
+    dockhand: { synced_at: now, stale: false, error: null, containers: [
+      { name: '<script>bad</script>', image: 'example/image:latest', state: 'running', stack: null, status: 'update', checked_at: now },
+      { name: 'web', image: 'web:latest', state: 'running', stack: 'media', status: 'unknown' },
+    ] },
+  } });
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ containers: true, targets: [target], mobile });
+    assert.equal(ui.document.querySelector('.view-tabs').hidden, false);
+    const hit = ui.document.querySelector('[data-open-docker="docker"]');
+    assert.match(hit.textContent, /1/);
+    assert.match(hit.getAttribute('aria-label'), /externally by Dockhand/);
+    assert.equal(ui.document.querySelectorAll('[data-stack]').length, 0);
+    ui.click('[data-open-docker="docker"]');
+    const detail = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
+    assert.match(detail.textContent, /Standalone containers/);
+    assert.match(detail.textContent, /Compose stack · media/);
+    assert.match(detail.textContent, /check status unknown/);
+    assert.equal(detail.querySelector('script'), null);
+    assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+    ui.click('[data-open-docker="docker"]');
+    assert.equal(ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail'), null);
+    assert.deepEqual(ui.errors, []);
+  }
+});
+
+test("native Docker counts services, distinguishes missing Compose coverage and keeps Update label", async () => {
+  const stacks = { docker: 'yes', compose: 'v2', checked_at: now, stacks: [
+    { name: 'media', state: 'running', update_available: true, services: [
+      { name: 'web', status: 'running', outdated: true }, { name: 'worker', status: 'running', outdated: true },
+    ] },
+  ] };
+  const ui = await dashboard({ docker: true, targets: [
+    machine('native', { view: { stacks }, check: { packages: [{ name: 'curl', current: '1', available: '2' }] } }),
+    machine('empty', { view: { stacks: { ...stacks, stacks: [] } } }),
+  ] });
+  assert.match(ui.document.querySelector('[data-open-docker="native"]').textContent, /2/);
+  assert.match(ui.document.querySelector('[data-open-docker="empty"]').textContent, /\?/);
+  ui.click('[data-open-docker="empty"]');
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Standalone containers are not checked/);
+  assert.match(ui.document.querySelector('.scope-headings').textContent, /Operating system.*Containers/);
+  assert.equal(ui.document.querySelector('[data-act="upgrade"]').textContent, 'Update');
+  ui.click('[data-act="upgrade"]');
+  assert.match(ui.document.querySelector('#confirm-text').textContent, /Container images are managed separately/);
+  assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+});
+
+test("a failed Dockhand sync shows unknown while retaining last-known results", async () => {
+  const ui = await dashboard({ containers: true, targets: [machine('stale', { view: {
+    docker_settings: { mode: 'external', manager_name: 'Dockhand', manager_url: 'https://dockhand.example' },
+    dockhand: { synced_at: now, stale: true, error: 'Dockhand status unavailable', containers: [
+      { name: 'old', image: 'old:latest', state: 'running', status: 'update', stack: null, checked_at: now },
+    ] },
+  } })] });
+  assert.match(ui.document.querySelector('[data-open-docker="stale"]').textContent, /\?/);
+  ui.click('[data-open-docker="stale"]');
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Last-known results.*stale/);
+  assert.match(ui.document.querySelector('.container-detail').textContent, /old:latest/);
+  assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
 });
 
 

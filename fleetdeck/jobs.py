@@ -107,6 +107,7 @@ class JobManager:
         age_recipient: str | None = None,
         backup_password: str | None = None,
         docker_enabled: bool = False,
+        dockhand_targets: dict[str, str] | None = None,
     ):
         self.inventory = inventory
         # Where backups that are saved on the dashboard go (see backup_runs.DASHBOARD).
@@ -118,6 +119,7 @@ class JobManager:
         self.snapshot_keep = snapshot_keep
         self.community_scripts_update = community_scripts_update
         self.docker_enabled = docker_enabled
+        self.dockhand_targets = dockhand_targets or {}
         self.sem = asyncio.Semaphore(max_parallel)
         self.store = store
         self.jobs: OrderedDict[str, Job] = OrderedDict()
@@ -167,10 +169,16 @@ class JobManager:
             self._persist(self.store.save_check, target_id, check)
 
     def get_docker_settings(self, target_id: str) -> DockerSettings:
+        if target_id in self.dockhand_targets:
+            return DockerSettings(
+                mode="external", manager_name="Dockhand", manager_url=self.dockhand_targets[target_id]
+            )
         return self.docker_settings.get(target_id, DockerSettings())
 
     def set_docker_settings(self, target_id: str, settings: DockerSettings) -> None:
         self.inventory.get(target_id)  # reject stale / unknown IDs
+        if target_id in self.dockhand_targets:
+            raise ValueError("This machine is mapped to Dockhand in configuration; change its mapping in Settings")
         if any(
             j.target_id == target_id and j.action in ("stacks", "stack-update") and j.status in ("queued", "running")
             for j in self.jobs.values()
@@ -407,7 +415,11 @@ class JobManager:
                     )
                     job.log.append("== Backup finished")
                 elif job.action == "check":
-                    check = await _check(executor, on_line, discover_docker=self.docker_enabled)
+                    check = await _check(
+                        executor,
+                        on_line,
+                        discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets,
+                    )
                     self._set_check(job.target_id, check)
                     if check.error:
                         raise RuntimeError(check.error)
@@ -425,7 +437,13 @@ class JobManager:
                     else:
                         job.log.append("== Rolled back; re-checking")
                         try:
-                            self._set_check(job.target_id, await _check(executor, discover_docker=self.docker_enabled))
+                            self._set_check(
+                                job.target_id,
+                                await _check(
+                                    executor,
+                                    discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets,
+                                ),
+                            )
                         except Exception as e:  # noqa: BLE001 - the rollback itself worked
                             job.log.append(f"! re-check failed: {e}")
                 elif job.action == "stacks":
@@ -625,7 +643,9 @@ class JobManager:
         job.log.append("== Re-checking for remaining updates")
         # The upgrade itself worked; a failed re-check is reported but doesn't fail the job.
         try:
-            check = await _check(executor, discover_docker=self.docker_enabled)
+            check = await _check(
+                executor, discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets
+            )
         except Exception as e:  # noqa: BLE001
             check = CheckResult(checked_at=_now(), error=str(e) or type(e).__name__)
         self._set_check(job.target_id, check)
@@ -726,7 +746,9 @@ class JobManager:
             if attempt:
                 await asyncio.sleep(REBOOT_POLL)
             try:
-                check = await _check(executor, discover_docker=self.docker_enabled)
+                check = await _check(
+                    executor, discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets
+                )
             except Exception as e:  # noqa: BLE001
                 check = CheckResult(checked_at=_now(), error=str(e) or type(e).__name__)
             if not check.error:

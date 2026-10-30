@@ -12,6 +12,7 @@ import os
 import re
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -306,6 +307,48 @@ class ConsoleConfig(BaseModel):
         return v
 
 
+class DockhandEnvironment(BaseModel):
+    target_id: str = Field(min_length=1, max_length=512)
+    environment_id: int = Field(ge=1)
+
+
+class DockhandConfig(BaseModel):
+    """Opt-in cached status only. Never pulls images or changes containers."""
+
+    url: str = Field(max_length=2048)
+    token: str = Field(min_length=1, max_length=4096, repr=False)
+    poll_seconds: int = Field(300, ge=60, le=86400)
+    environments: list[DockhandEnvironment] = Field(min_length=1, max_length=32)
+
+    @field_validator("url")
+    @classmethod
+    def _url(cls, value: str) -> str:
+        if any(ord(c) < 33 or ord(c) == 127 for c in value):
+            raise ValueError("Dockhand URL must not contain whitespace or control characters")
+        parsed = urlsplit(value)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("Dockhand URL must be HTTP(S), without embedded credentials")
+        if parsed.query or parsed.fragment:
+            raise ValueError("Dockhand URL must not contain a query or fragment")
+        # Validate the port now, rather than failing later inside the status API.
+        _ = parsed.port
+        return value.rstrip("/")
+
+    @field_validator("token")
+    @classmethod
+    def _token(cls, value: str) -> str:
+        if any(ord(c) < 33 or ord(c) > 126 for c in value):
+            raise ValueError("Dockhand token must be a printable token without whitespace")
+        return value
+
+    @field_validator("environments")
+    @classmethod
+    def _unique(cls, values: list[DockhandEnvironment]) -> list[DockhandEnvironment]:
+        if len({v.target_id for v in values}) != len(values) or len({v.environment_id for v in values}) != len(values):
+            raise ValueError("Each Dockhand environment and Fleetdeck target may be mapped only once")
+        return values
+
+
 class AppConfig(BaseModel):
     proxmox: list[ProxmoxConfig] = Field(default_factory=list)
     incus: list[IncusConfig] = Field(default_factory=list)
@@ -328,6 +371,8 @@ class AppConfig(BaseModel):
     # Keep the dashboard OS-only unless Docker management is explicitly wanted.
     # This also blocks Docker API jobs and overrides schedule.check_docker.
     docker_enabled: bool = False
+    # Independent of native Docker management. Configured target IDs always block native jobs.
+    dockhand: DockhandConfig | None = None
     # An `age` public key (age1...). When set, the host config archives made by the "Back up" button are
     # encrypted to it (.tar.gz.age); only the matching private key, which the dashboard never has, opens them.
     backup_age_recipient: str | None = None
