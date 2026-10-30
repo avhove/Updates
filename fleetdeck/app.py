@@ -144,7 +144,7 @@ def create_app(
         dockhand_targets={m.target_id: cfg.dockhand.url for m in cfg.dockhand.environments} if cfg.dockhand else {},
     )
     # Demo mode must never contact a configured external manager.
-    dockhand = DockhandReader(cfg.dockhand) if cfg.dockhand and not cfg.demo and not locked else None
+    dockhand = DockhandReader(cfg.dockhand, store=store) if cfg.dockhand and not cfg.demo and not locked else None
     demo_dockhand = (
         {m.target_id: demo_status(cfg.dockhand.url) for m in cfg.dockhand.environments}
         if cfg.demo and cfg.dockhand
@@ -273,6 +273,7 @@ def create_app(
                 "docker_enabled": cfg.docker_enabled,
                 "containers_visible": bool(cfg.docker_enabled or cfg.dockhand),
                 "dockhand_checks_allowed": bool(cfg.dockhand and cfg.dockhand.allow_checks),
+                "dockhand_results_persistent": store is not None,
             },
         }
 
@@ -295,6 +296,7 @@ def create_app(
                             update={
                                 "status": "current" if c.status == "unknown" else c.status,
                                 "checked_at": now,
+                                "source": "fleetdeck_button",
                             }
                         )
                         for c in previous.containers

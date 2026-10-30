@@ -230,7 +230,7 @@ test("update columns separate security, packages and phased updates with only re
   });
   const doc = ui.document;
   const headers = [...doc.querySelectorAll(".machine-table > thead .column-headings th")].map((el) => el.textContent.trim());
-  assert.deepEqual(headers, ["", "Machine", "Security", "Packages", "Phased", "Reboot", "Status", "Action", "Checked", "Info", "More"]);
+  assert.deepEqual(headers, ["", "Machine", "Security", "Packages", "Phased", "Reboot", "Status", "Action", "OS checked", "Info", "More"]);
   assert.equal(doc.querySelectorAll(".machine-table > thead > tr").length, 1);
   assert.equal(doc.querySelectorAll(".machine-table > colgroup > col").length, 11);
   assert.equal(doc.querySelector(".more-heading").textContent, "More");
@@ -579,7 +579,7 @@ test("dashboard menu uses the compact simple list and preserves hidden-view stat
   assert.equal(summary.getAttribute("aria-label"), "More options");
   assert.deepEqual(
     [...doc.querySelectorAll(".dashboard-menu-item")].map((el) => el.textContent.trim().replace(/\s+/g, " ")),
-    ["Machines", "Settings", "Refresh inventory", "Show hidden machines1", "Back up & restore", "Test notifications"],
+    ["Machines", "Settings", "Refresh inventory", "Check OS updates", "Check container updates", "Show hidden machines1", "Back up & restore", "Test notifications"],
   );
   const toggle = doc.querySelector("#show-hidden");
   assert.equal(toggle.hidden, false);
@@ -652,7 +652,7 @@ test("Dockhand works with native Docker disabled and expands escaped standalone 
     assert.deepEqual([...detail.querySelectorAll('thead th')].map(c => c.textContent), ['Container', 'Stack', 'Image', 'Status', 'Last checked']);
     assert.deepEqual([...detail.querySelectorAll('td[data-label="Stack"]')].map(c => c.textContent), ['alpha', 'alpha', 'media', 'Standalone', 'Zeta']);
     assert.deepEqual([...detail.querySelectorAll('.dockhand-name')].slice(0, 2).map(c => c.firstChild.textContent), ['alpha-a', 'alpha-b']);
-    assert.match(detail.textContent, /check status unknown/);
+    assert.match(detail.textContent, /No confirmed check result/);
     assert.equal(detail.querySelector('script'), null);
     assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
     ui.click('[data-open-docker="docker"]');
@@ -796,4 +796,104 @@ test("machine headers merge standalone captions and keep OS check time inside th
     assert.ok(row.querySelector('[data-label="Security"]').classList.contains('section-start'));
     assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
   }
+});
+
+test("Dockhand explains read-only sync, saved history and explicit fresh checks in its details", async () => {
+  for (const mobile of [false, true]) {
+    const dh = { manager_url: 'https://dockhand.example', synced_at: now, stale: false,
+      scheduled_check_at: now, scheduled_status: 'success', scheduled_checked: 2, scheduled_errors: 1,
+      history_error: 'History warning <script>not HTML</script>', containers: [
+        { name: 'web', image: 'web:latest', state: 'running', status: 'current', checked_at: now, source: 'dockhand_schedule' },
+      ] };
+    const ui = await dashboard({ containers: true, mobile, targets: [machine('docker', { view: {
+      dockhand: dh, docker_settings: { mode: 'external', manager_name: 'Dockhand' },
+    } })] });
+    ui.click('[data-open-docker="docker"]');
+    const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
+    assert.match(panel.textContent, /Dockhand owns the scheduled checks/);
+    assert.match(panel.textContent, /automatic dashboard polling reads saved reports without starting new checks/);
+    assert.match(panel.textContent, /saved across Fleetdeck restarts/);
+    assert.match(panel.textContent, /Completed with 1 check error/);
+    assert.match(panel.textContent, /no result could be reliably matched/);
+    assert.equal(panel.querySelector('script'), null);
+    assert.equal(panel.querySelector('[data-label="Last checked"]').title, 'From Dockhand scheduled-check history');
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+    assert.equal(panel.querySelector('[data-dockhand-check]').disabled, true);
+  }
+});
+
+test("manual inventory refresh requests enabled Dockhand checks while ordinary polling stays read-only", async () => {
+  const dh = () => ({ manager_url: 'https://dockhand.example', synced_at: now, stale: false,
+    containers: [{ name: 'web', image: 'web:latest', state: 'running', status: 'unknown' }] });
+  const targets = [
+    machine('mapped', { view: { dockhand: dh() } }),
+    machine('hidden', { view: { hidden: true, dockhand: dh() } }),
+    machine('running-check', { view: { dockhand: { ...dh(), checking: true } } }),
+    machine('unmapped'),
+  ];
+  const ui = await dashboard({ containers: true, dockhandChecks: true, targets });
+  assert.equal(ui.document.querySelector('#refresh span').textContent, 'Refresh inventory & check Dockhand');
+  await ui.load(true);
+  assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  await Promise.all([ui.document.querySelector('#refresh').onclick(), ui.document.querySelector('#refresh').onclick()]);
+  const writes = ui.calls.filter(c => c.method === 'POST');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].path, '/api/dockhand/check');
+  assert.deepEqual(JSON.parse(writes[0].body), { target_id: 'mapped' });
+  assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+  assert.equal(ui.document.querySelector('#refresh').disabled, false);
+  const readonly = await dashboard({ containers: true, targets });
+  await readonly.document.querySelector('#refresh').onclick();
+  assert.equal(readonly.calls.some(c => c.method === 'POST'), false);
+  assert.equal(readonly.document.querySelector('#refresh span').textContent, 'Refresh inventory');
+});
+
+test("top Check updates checks OS and Dockhand; row Update remains OS only", async () => {
+  const target = machine('docker', { check: { packages: [{ name: 'curl', current: '1', available: '2' }] }, view: {
+    dockhand: { manager_url: 'https://dockhand.example', stale: false, containers: [] },
+  } });
+  const ui = await dashboard({ containers: true, dockhandChecks: true, targets: [target] });
+  await ui.document.querySelector('#check-all').onclick();
+  const os = ui.calls.filter(c => c.path === '/api/actions');
+  const docker = ui.calls.filter(c => c.path === '/api/dockhand/check');
+  assert.equal(os.length, 1);
+  assert.equal(JSON.parse(os[0].body).action, 'check');
+  assert.equal(docker.length, 1);
+  assert.deepEqual(JSON.parse(docker[0].body), { target_id: 'docker' });
+  assert.equal(ui.document.querySelector('#check-all').disabled, false);
+  ui.calls.length = 0;
+  ui.click('[data-act="upgrade"]');
+  const dialog = ui.document.querySelector('#confirm');
+  dialog.returnValue = 'ok'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+  assert.equal(ui.calls.some(c => c.path === '/api/dockhand/check'), false);
+  assert.equal(JSON.parse(ui.calls.find(c => c.path === '/api/actions').body).action, 'upgrade');
+});
+
+test("menu OS and container checks have separate scopes and preserve opt-in", async () => {
+  for (const allowed of [false, true]) {
+    const ui = await dashboard({ containers: true, dockhandChecks: allowed, targets: [machine('docker', { view: {
+      dockhand: { manager_url: 'https://dockhand.example', stale: false, containers: [] },
+    } })] });
+    assert.equal(ui.document.querySelector('#check-containers').hidden, false);
+    assert.equal(ui.document.querySelector('#check-containers').disabled, !allowed);
+    await ui.document.querySelector('#check-os').onclick();
+    assert.equal(ui.calls.filter(c => c.path === '/api/actions').length, 1);
+    assert.equal(ui.calls.some(c => c.path === '/api/dockhand/check'), false);
+    ui.calls.length = 0;
+    await ui.document.querySelector('#check-containers').onclick();
+    assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+    assert.equal(ui.calls.filter(c => c.path === '/api/dockhand/check').length, allowed ? 1 : 0);
+  }
+});
+
+test("a newer confirmed manual check remains usable when schedule history is unavailable", async () => {
+  const ui = await dashboard({ containers: true, targets: [machine('docker', { view: {
+    docker_settings: { mode: 'external', manager_name: 'Dockhand' },
+    dockhand: { manager_url: 'https://dockhand.example', stale: false, history_error: 'Read access unavailable',
+      last_check_at: now, scheduled_status: 'failed', scheduled_check_at: '2026-01-01T00:00:00Z', containers: [
+        { name: 'web', image: 'web:latest', state: 'running', status: 'current', checked_at: now, source: 'fleetdeck_button' },
+      ] },
+  } })] });
+  assert.match(ui.document.querySelector('[data-open-docker]').textContent, /0/);
+  assert.doesNotMatch(ui.document.querySelector('[data-open-docker]').textContent, /\?/);
 });

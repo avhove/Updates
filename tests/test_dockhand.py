@@ -49,6 +49,9 @@ async def test_reader_only_gets_cached_routes_preserves_history_and_never_follow
         calls.append(request)
         assert request.method == "GET"
         assert request.headers["authorization"] == "Bearer secret-test-token"
+        if request.url.path == "/api/schedules/executions":
+            assert request.url.params["environmentId"] == "1"
+            return httpx.Response(404)
         assert request.url.params["env"] == "1"
         if fail:
             return httpx.Response(302, headers={"location": "https://other.example/steal"})
@@ -70,16 +73,16 @@ async def test_reader_only_gets_cached_routes_preserves_history_and_never_follow
 
     reader = DockhandReader(config(), transport=httpx.MockTransport(respond))
     await reader.refresh()
-    assert len(calls) == 2
+    assert len(calls) == 3
     result = reader.status["t1"]
     assert result.stale is False
     assert result.containers[0].status == "unknown"  # standalone record with no cached outcome
     assert result.containers[1].stack == "media"
     assert result.containers[1].status == "update"
     await reader.refresh()
-    assert len(calls) == 2  # ordinary dashboard polling respects the interval
+    assert len(calls) == 3  # ordinary dashboard polling respects the interval
     await reader.refresh(force=True)
-    assert len(calls) == 4  # explicit inventory refresh fetches cached GET status immediately
+    assert len(calls) == 6  # explicit inventory refresh fetches cached GET status immediately
     assert all(req.method == "GET" for req in calls)
     result = reader.status["t1"]
     fail = True
@@ -89,7 +92,7 @@ async def test_reader_only_gets_cached_routes_preserves_history_and_never_follow
     assert failed.stale and failed.error
     assert failed.synced_at == result.synced_at
     assert failed.containers == result.containers
-    assert len(calls) == 5
+    assert len(calls) == 7
     assert "secret-test-token" not in failed.model_dump_json()
     assert "other.example" not in failed.model_dump_json()
     await reader.aclose()
@@ -164,6 +167,7 @@ def test_status_api_keeps_token_private_and_docker_disabled(tmp_path, monkeypatc
         assert response.status_code == 200
         data = response.json()
         assert data["settings"]["containers_visible"] is True
+        assert data["settings"]["dockhand_results_persistent"] is True
         assert data["settings"]["docker_enabled"] is False
         assert data["targets"][0]["docker_settings"]["mode"] == "external"
         assert cfg.dockhand.token not in response.text
@@ -247,6 +251,8 @@ async def test_explicit_check_captures_full_results_and_keeps_them_across_cached
             return httpx.Response(200, json=containers())
         if req.url.path == "/api/containers/pending-updates":
             return httpx.Response(200, json={"pendingUpdates": []})
+        if req.url.path == "/api/schedules/executions":
+            return httpx.Response(404)
         assert req.url.path == "/api/containers/check-updates"
         assert req.method == "POST" and req.headers["accept"] == "application/json"
         assert req.url.params["env"] == "1"
