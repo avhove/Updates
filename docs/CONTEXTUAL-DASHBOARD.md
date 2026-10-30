@@ -714,3 +714,9 @@ machine/OS menu. Both desktop and mobile preserve these scopes. The Updates cell
 horizontal inset; package, container and reboot glyphs use 16px boxes and a 3px inset so the first
 visible icon aligns across rows. Packed 14px spacing and count order remain unchanged.
 All 65 offline UI tests pass. Simulated browser measurements confirm matching insets and sizes.
+
+Follow-up: preserve Monitor only / Allow updates in the container menu, since that policy also
+controls native container updates. Machine information and Docker management remain machine-only.
+Reboot glyphs are centered in their square badge again; a desktop-only outer offset aligns the glyph
+with the other metrics. Mobile keeps its original badge and icon sizing.
+Native container summaries now say Up to date; Compose-only coverage remains explained in the details.

@@ -1556,7 +1556,8 @@ test("container menus omit machine information and provider management and use a
     } })] });
     ui.click('[data-machine-menu="scoped-menu"][data-menu-scope="containers"]');
     const menu = ui.document.querySelector('#machine-actions');
-    assert.equal(menu.querySelectorAll('[data-machine-info],[data-docker-settings],[data-monitor]').length, 0);
+    assert.equal(menu.querySelectorAll('[data-machine-info],[data-docker-settings]').length, 0);
+    assert.ok(menu.querySelector('[data-monitor]'));
     const details = menu.querySelector('[data-open-docker]');
     const check = menu.querySelector('[data-act="dockhand"]');
     assert.match(details.textContent, /View container details/);

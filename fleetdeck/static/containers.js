@@ -56,7 +56,7 @@ function containerStatus(v) {
   else if (s.updates) { symbol = "container"; label = "Updates available"; tone = "container-tone"; }
   else if (s.reviews) { symbol = "tag"; label = "Review needed"; tone = "container-review-tone"; }
   else if (s.coverage) { symbol = "info"; label = "Coverage exceptions"; }
-  else if (s.current) { symbol = "check"; label = s.provider === "native" ? "Compose up to date" : "Up to date"; tone = "ok"; }
+  else if (s.current) { symbol = "check"; label = "Up to date"; tone = "ok"; }
   return `<span class="status-inline ${tone}">${icon(symbol)}${label}</span>`;
 }
 

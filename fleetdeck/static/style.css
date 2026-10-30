@@ -1062,5 +1062,5 @@ a.brand { color: var(--text); text-decoration: none; }
 
 /* Use one column inset and one glyph size for OS, reboot and container metrics. */
 .dashboard-page .machine-table > tbody.machine-rows > tr > td.scope-metrics { padding-inline:0; }
-.dashboard-page .scope-metrics .reboot-status.required, .dashboard-page .os-metrics .reboot-status.required { justify-content:flex-start; padding:3px; box-sizing:border-box; }
-.dashboard-page .scope-metrics .reboot-status .ui-icon, .dashboard-page .os-metrics .reboot-status .ui-icon { width:16px; height:16px; flex:none; }
+.dashboard-page .machine-table .scope-metrics .reboot-status.required { justify-content:center; padding:0; margin-inline:-3px 3px; flex:none; box-sizing:border-box; }
+.dashboard-page .machine-table .scope-metrics .reboot-status .ui-icon { width:16px; height:16px; flex:none; }
