@@ -365,9 +365,9 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   Exact dates, storage, counts, verification, job coverage and backup notes live in one neutral
   information popover opened from **Machine information** in the **…** menu; repository notes remain available there.
 - Selecting machines reveals the bulk-update bar. Updates and reboots retain their confirmation dialogs.
-  The update dialog has a compact machine summary and aligned options. Snapshot first and Reboot
-  if required both start unchecked every time; users explicitly opt in for each operation. This
-  changes the manual confirmation default, not stored configuration or server-side snapshot behavior.
+  The update dialog has a compact machine summary and aligned options. Snapshot first follows
+  `snapshot_before_upgrade` for eligible guests, matching upstream. Reboot if required starts
+  unchecked each time. Both options are visible and can be changed before confirmation.
   Each nonzero update type in the confirmation has its own icon, including mixed Security,
   Package and Phased counts. Phased packages stay green and marked as waiting. Machine restrictions
   and helper-script notes remain visible beneath the type summary.
@@ -389,7 +389,7 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   a device check.
 
 Existing protections, authentication and CSRF protections remain in place.
-This does **not** add an OMV-specific updater. The upstream monitor-only policy is supported: checks and counts stay visible, OS and Docker deployments are blocked, and reboot/backup actions retain their existing protections. Monitor-only is managed through configuration, with a neutral eye-only label beside the machine name on desktop and mobile; Info explains the policy. The former override endpoint rejects changes and directs users to Settings. Previously saved database restrictions remain enforced for compatibility; they are never silently cleared.
+This does **not** add an OMV-specific updater. The upstream monitor-only policy is supported: checks and counts stay visible, OS and Docker deployments are blocked, and reboot/backup actions retain their existing protections. Monitor-only can be enabled or removed from the machine menu, matching upstream; configuration-enforced restrictions remain locked. A neutral eye-only label beside the machine name on desktop and mobile shows the policy, and Machine information explains it. Previously saved restrictions remain enforced until explicitly removed.
 
 ## Docker stays with your existing manager
 
@@ -590,3 +590,32 @@ unchanged; the user’s native Docker setting remains untouched.
 All 52 offline UI tests pass. New checks cover fixed slots, scoped legends, both providers, runtime
 versus update states, escaped names and short unknown-result copy; existing popup tests now exercise
 the menu workflow and focus return. Ruff checks pass. Browser review uses simulated machines only.
+
+
+### Upstream main compatibility (2026-10-30)
+
+Merged original Fleetdeck main through `81fa17f` (including dashboard PR #139 and screenshots #140).
+The fork retains native Docker opt-out, per-machine Docker policies, optional Dockhand integration,
+All/Machines/Containers scope rows, separate check ages/actions and the offline frontend tests.
+The user's configuration is not modified. Native Docker remains off by default; an optional
+Dockhand mapping never enables native fallback. `schedule.check_docker` continues to gate
+scheduled checks for both providers; ordinary polling and Refresh inventory remain read-only.
+
+Upstream custom update commands are supported through configuration and the OS machine menu.
+The command is shown escaped in the update confirmation and runs inside upstream's normal
+upgrade job, with its snapshot/log/recheck behavior and no built-in upgrade fallback on failure.
+It replaces the built-in OS updater, so its effects depend on the configured command. Container
+check/deployment actions remain separate. Upstream's password re-entry, source-network restriction,
+audit and notification protections are retained. Machines with custom commands are excluded from
+automatic security-only installations. Saved commands and Docker policies coexist in state storage.
+
+The upstream Monitor only / Allow updates controls are available in machine menus; configuration
+locks and backend enforcement remain in place. Snapshot defaults follow `snapshot_before_upgrade`;
+reboot stays opt-in. The upstream accessible dashboard link and current login/setup headers are retained.
+
+Integration verification: 486 backend tests passed, 6 skipped and 7 existing macOS/system-dependent
+checks deselected (Linux boot ID, GNU file discovery, wrapper privileges, local port check,
+downloaded bootstrap execution and GNU script). All 55 offline frontend tests passed, including
+custom command escaping and OS-only menu placement alongside Dockhand, configuration-locked
+monitor controls, snapshot defaults, mixed providers and read-only inventory refreshes.
+Ruff lint/format and diff checks passed. No real machine or external manager was contacted.

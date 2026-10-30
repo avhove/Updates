@@ -48,6 +48,8 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
       else if (path === "/api/schedule") body = schedule || { check_every: null };
       else if (path === "/api/actions") body = { jobs: [], rejected: {} };
       else if (path === "/api/dockhand/check") body = { started: true };
+      else if (path === "/api/monitor-only") body = { monitor_only: [] };
+      else if (path === "/api/update-command") body = { update_command: JSON.parse(options.body).command };
       else if (path === "/api/session") body = { login: false };
       else throw new Error(`Unexpected request: ${path}`);
       return { ok: true, json: async () => body };
@@ -107,7 +109,7 @@ test("mobile cards preserve package details, information and confirmation withou
   assert.match(doc.querySelector('#machine-information').textContent, /Covered by a backup job/);
   ui.click('[data-machine-row="web"] [data-act="upgrade"]');
   assert.equal(doc.querySelector('#confirm').open, true);
-  assert.equal(doc.querySelector('#confirm-snapshot').checked, false);
+  assert.equal(doc.querySelector('#confirm-snapshot').checked, true);
   doc.querySelector('#confirm').close();
   ui.setMobile(false);
   assert.equal(doc.querySelectorAll('.mc-card').length, 0);
@@ -268,7 +270,7 @@ test("update columns separate security, packages and phased updates with only re
   assert.match(doc.querySelector("#machine-actions").textContent, /Back up configuration/);
   assert.equal(doc.querySelectorAll("#machine-actions .ui-icon").length >= 3, true);
   assert.equal(doc.querySelector("#machine-actions .menu-caption").textContent.trim(), "pve");
-  assert.doesNotMatch(doc.querySelector("#machine-actions").textContent, /…/);
+  assert.match(doc.querySelector("#machine-actions").textContent, /Update command…/);
   assert.deepEqual(ui.errors, []);
 });
 
@@ -435,19 +437,19 @@ test("update confirmation gives each package type its own icon and preserves not
   assert.equal(ui.calls.some(call => call.path === '/api/actions'), false);
 });
 
-test("update confirmation resets both options and submits only explicit choices", async () => {
+test("update confirmation follows snapshot settings, resets reboot and submits selected choices", async () => {
   const ui = await dashboard({ targets: [machine("vm", { guest: true, parent: "pve", check: { packages: [{ name: "curl", available: "2" }] } }),
     machine("host", { target: { platform: "ssh" }, check: { packages: [{ name: "curl", available: "2" }] } })] });
   const doc = ui.document, dialog = doc.querySelector("#confirm");
   ui.click('[data-machine-row="vm"] [data-act="upgrade"]');
   assert.equal(doc.querySelector("#confirm-title").textContent, "Update machine?");
-  assert.equal(doc.querySelector("#confirm-snapshot").checked, false);
+  assert.equal(doc.querySelector("#confirm-snapshot").checked, true);
   assert.equal(doc.querySelector("#confirm-reboot").checked, false);
   assert.equal(doc.querySelector("#confirm-snapshot-row").hidden, false);
   assert.match(doc.querySelector("#confirm-list").textContent, /vmVM1 package/);
   dialog.returnValue = "ok"; dialog.dispatchEvent(new ui.window.Event("close")); await flush();
   let request = ui.calls.filter((c) => c.path === "/api/actions").at(-1);
-  assert.equal(JSON.parse(request.body).snapshot_first, false);
+  assert.equal(JSON.parse(request.body).snapshot_first, true);
   assert.equal(JSON.parse(request.body).reboot_if_required, false);
   ui.click('[data-machine-row="vm"] [data-act="upgrade"]');
   doc.querySelector("#confirm-snapshot").checked = true;
@@ -473,7 +475,7 @@ test("update confirmation resets both options and submits only explicit choices"
   ui.click("#update-selected");
   assert.equal(doc.querySelector("#confirm-title").textContent, "Update 2 machines?");
   assert.equal(doc.querySelectorAll("#confirm-list .confirm-machine").length, 2);
-  assert.equal(doc.querySelector("#confirm-snapshot").checked, false);
+  assert.equal(doc.querySelector("#confirm-snapshot").checked, true);
   assert.equal(doc.querySelector("#confirm-reboot").checked, false);
   assert.equal(doc.querySelector("#confirm-ok").textContent, "Update 2 machines");
   assert.deepEqual(ui.errors, []);
@@ -627,8 +629,8 @@ test("optional Docker status is separate, honest about failed checks, and never 
 test("favicon and clickable Fleetdeck logo are present", async () => {
   const ui = await dashboard();
   assert.equal(ui.document.querySelector('link[rel="icon"]').getAttribute("href"), "/static/favicon.svg");
-  assert.equal(ui.document.querySelector("a.brand").getAttribute("href"), "/");
-  assert.equal(ui.document.querySelector("a.brand").getAttribute("aria-label"), "Fleetdeck dashboard");
+  assert.equal(ui.document.querySelector("h1 a").getAttribute("href"), "/");
+  assert.equal(ui.document.querySelector("h1 a").getAttribute("aria-label"), "Fleetdeck dashboard");
 });
 
 test("Dockhand works with native Docker disabled and expands escaped standalone status without writes", async () => {
@@ -761,7 +763,7 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
     assert.ok(row.querySelector('[data-act="reboot"]'));
     if (!mobile) assert.ok(row.querySelector('[data-select]').disabled);
     ui.click('[data-machine-menu="appliance"]');
-    assert.equal(ui.document.querySelector('[data-monitor]'), null);
+    assert.equal(ui.document.querySelector('[data-monitor]').disabled, true);
     assert.equal(ui.calls.some(c => c.path === '/api/monitor-only'), false);
   }
 });
@@ -1301,4 +1303,54 @@ test("runtime dots precede escaped container names independently of update-check
   assert.ok(panel.querySelector('.container-runtime-dot.paused'));
   assert.ok(panel.querySelector('.container-runtime-dot.stopped'));
   assert.equal(ui.calls.some(c=>c.method==='POST'),false);
+});
+
+test("upstream own updater stays in OS menus and escaped confirmation alongside Dockhand", async () => {
+  for (const mobile of [false, true]) {
+    const command = 'omv-upgrade --note "<unsafe>"';
+    const target = machine('nas', { guest: true, view: { update_command: command,
+      dockhand: { synced_at: now, stale: false, containers: [] } },
+      check: { packages: [{ name: 'curl', available: '2' }] } });
+    const ui = await dashboard({ targets: [target], containers: true, mobile });
+    assert.match(ui.document.querySelector('[data-machine-row="nas"]').textContent, /own updater/);
+    ui.click('[data-machine-row="nas"] [data-machine-menu]');
+    ui.click('[data-cmd="nas"]');
+    assert.equal(ui.document.querySelector('#cmd-dialog').open, true);
+    assert.equal(ui.document.querySelector('#cmd-command').value, command);
+    ui.document.querySelector('#cmd-dialog').close();
+    ui.click('[data-machine-row="nas"] [data-act="upgrade"]');
+    assert.match(ui.document.querySelector('#confirm-list').textContent, /omv-upgrade/);
+    assert.equal(ui.document.querySelector('#confirm-list unsafe'), null);
+    assert.equal(ui.calls.some(c => c.path === '/api/actions' || c.path === '/api/dockhand/check'), false);
+  }
+});
+
+test("upstream monitor menu blocks deployments without changing native or Dockhand permissions", async () => {
+  const target = machine('monitor-menu', { check: { packages: [{ name: 'curl', available: '2' }] } });
+  const ui = await dashboard({ targets: [target] });
+  ui.click('[data-machine-menu="monitor-menu"]');
+  ui.click('[data-monitor="1"]'); await flush();
+  assert.equal(target.monitor_only, true);
+  assert.equal(ui.document.querySelector('[data-act="upgrade"]'), null);
+  assert.equal(ui.state.settings.docker_enabled, false);
+  ui.click('[data-machine-menu="monitor-menu"]');
+  ui.click('[data-monitor="0"]'); await flush();
+  assert.equal(target.monitor_only, false);
+  assert.ok(ui.document.querySelector('[data-act="upgrade"]'));
+  assert.equal(ui.calls.filter(c => c.path === '/api/monitor-only').length, 2);
+  assert.equal(ui.calls.some(c => c.path === '/api/actions' || c.path === '/api/dockhand/check'), false);
+});
+
+test("snapshot defaults follow settings and command configuration cannot be edited in the dialog", async () => {
+  const target = machine('configured', { guest: true, target: { update_command: 'omv-upgrade' },
+    view: { update_command: 'omv-upgrade' }, check: { packages: [{ name: 'curl', available: '2' }] } });
+  const ui = await dashboard({ targets: [target] });
+  ui.data.settings.snapshot_before_upgrade = false;
+  ui.click('[data-act="upgrade"]');
+  assert.equal(ui.document.querySelector('#confirm-snapshot').checked, false);
+  ui.document.querySelector('#confirm').close();
+  ui.click('[data-machine-menu="configured"]'); ui.click('[data-cmd="configured"]');
+  assert.equal(ui.document.querySelector('#cmd-command').disabled, true);
+  assert.equal(ui.document.querySelector('#cmd-save').disabled, true);
+  assert.equal(ui.document.querySelector('#cmd-config').hidden, false);
 });

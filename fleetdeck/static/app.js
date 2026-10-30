@@ -248,7 +248,9 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
   const shown = displayCheck(v);
   const self = v.runs_dashboard ? ` <span class="chip" title="This dashboard runs here">dashboard</span>` : "";
   const monitor = v.monitor_only ? ` <span class="chip monitor-policy" role="img" aria-label="Monitor only" title="${MONITOR_TIP}">${icon("eye")}</span>` : "";
-  const cs = c?.community_script
+  const cs = v.update_command
+    ? ` <span class="chip" title="${esc(`Update runs: ${v.update_command}`)}">own updater</span>`
+    : c?.community_script
     ? ` <span class="chip" title="${esc(csTip(c.community_script))}">helper script</span>` : "";
   const note = t.updatable && t.note
     ? ` <span class="machine-note warn" title="${esc(t.note)}" aria-label="${esc(t.note)}">${icon("alert")}</span>` : "";
@@ -478,6 +480,8 @@ function openMachineMenu(id, trigger) {
     (containerOnly || nextAction(v).includes('data-act="reboot"') ? "" : action("reboot", "Reboot", "reboot", canReboot(t) && !busy && !v.blocked, t.no_reboot || v.blocked || t.note)) +
     (!containerOnly && t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
     (hasDocker(v) && !v.dockhand ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
+    (!containerOnly && canUpgrade(t) ? `<button data-cmd="${esc(id)}" title="${esc(v.update_command ? `Update runs: ${v.update_command}` : "Use the machine's own update command instead of the built-in OS upgrade")}">${icon("settings")}Update command…</button>` : "") +
+    `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` +
     (!containerOnly && state.console?.enabled && !["stopped", "offline"].includes(t.status) ? `<button data-run="${esc(id)}">${icon("terminal")}Run command</button>` : "") +
     (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("boxes")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
   menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
@@ -544,7 +548,7 @@ function openMachineInformation(id, trigger) {
   const updates = [];
   if (v.monitor_only) {
     updates.push("Monitor only: updates are installed outside Fleetdeck. Checks, reboots and backups remain available.");
-    updates.push(v.target.monitor_only ? "Update policy is managed in configuration on the Settings page." : "A saved monitor-only restriction from an earlier version remains active for safety.");
+    updates.push(v.target.monitor_only ? "Update policy is managed in configuration on the Settings page." : "Use Allow updates in the machine menu to remove this dashboard restriction.");
   }
   if (!v.check) updates.push("No update check has completed for this machine.");
   if (v.check?.os) updates.push(`Operating system: ${v.check.os}`);
@@ -782,7 +786,10 @@ function confirmAction(action, ids) {
     const summaryText = detail;
     if (action === "upgrade" && v?.target.no_reboot) detail += ` · won't reboot: ${v.target.no_reboot}`;
     const app = v?.check?.community_script;
-    if (action === "upgrade" && app) {
+    let own = "";
+    if (action === "upgrade" && v?.update_command) {
+      own = ` <span class="muted">· runs its own update command instead:</span> <code>${esc(v.update_command)}</code>`;
+    } else if (action === "upgrade" && app) {
       detail += state.settings.community_scripts_update
         ? ` · then runs ${app}'s own update (helper script)`
         : ` · ${app}'s own update is off: run "update" in it if it misbehaves`;
@@ -791,13 +798,13 @@ function confirmAction(action, ids) {
       const machineIcon = v?.target.kind === "host" ? "server" : "monitor";
       const extra = detail.slice(summaryText.length).replace(/^ · /, "");
       const summary = typeSummary ? `${typeSummary}${extra ? `<span class="confirm-detail-note">${esc(extra)}</span>` : ""}` : `${icon("package")}<span>${esc(detail)}</span>`;
-      return `<li class="confirm-machine"><span class="confirm-machine-name">${icon(machineIcon)}<strong>${esc(v?.target.name || id)}</strong>${v ? `<span class="chip">${esc(kindLabel(v.target))}</span>` : ""}</span><span class="confirm-machine-detail muted">${summary}</span></li>`;
+      return `<li class="confirm-machine"><span class="confirm-machine-name">${icon(machineIcon)}<strong>${esc(v?.target.name || id)}</strong>${v ? `<span class="chip">${esc(kindLabel(v.target))}</span>` : ""}</span><span class="confirm-machine-detail muted">${summary}${own}</span></li>`;
     }
-    return `<li>${esc(v?.target.name || id)} <span class="muted">${esc(detail)}</span></li>`;
+    return `<li>${esc(v?.target.name || id)} <span class="muted">${esc(detail)}</span>${own}</li>`;
   }).join("");
   const snapshottable = action === "upgrade" && ids.some((id) => byId.get(id)?.target.can_snapshot);
   $("#confirm-snapshot-row").hidden = !snapshottable;
-  $("#confirm-snapshot").checked = false;
+  $("#confirm-snapshot").checked = snapshottable && !!state.settings.snapshot_before_upgrade;
   $("#confirm-snapshot-label").textContent = ids.length === 1 ? "Take a snapshot first" : "Take snapshots first";
   const dlg = $("#confirm");
   dlg.returnValue = "";
@@ -869,6 +876,55 @@ async function showLog(jobId) {
   render();
 }
 
+function editUpdateCommand(id) {
+  const v = state.targets.find((x) => x.target.id === id);
+  if (!v) return;
+  const inConfig = !!v.target.update_command;
+  $("#cmd-title").textContent = `Update command for ${v.target.name}`;
+  $("#cmd-command").value = v.update_command || "";
+  $("#cmd-command").disabled = inConfig;
+  $("#cmd-password").disabled = inConfig;
+  $("#cmd-save").disabled = inConfig;
+  $("#cmd-config").hidden = !inConfig;
+  $("#cmd-password").value = "";
+  $("#cmd-msg").textContent = "";
+  $("#cmd-dialog").dataset.id = id;
+  $("#cmd-dialog").showModal();
+}
+
+$("#cmd-form").addEventListener("submit", async (e) => {
+  if (e.submitter?.value === "cancel") return;
+  e.preventDefault();
+  const id = $("#cmd-dialog").dataset.id;
+  $("#cmd-msg").textContent = "";
+  try {
+    const r = await api("/api/update-command", {
+      method: "PUT",
+      body: JSON.stringify({ target_id: id, command: $("#cmd-command").value.trim() || null, password: $("#cmd-password").value }),
+    });
+    for (const v of state.targets) if (v.target.id === id) v.update_command = r.update_command;
+    $("#cmd-password").value = "";
+    $("#cmd-dialog").close();
+    render();
+  } catch (err) {
+    let msg = err.message;
+    try { msg = JSON.parse(msg.slice(msg.indexOf(" ") + 1)).detail || msg; } catch { /* plain text */ }
+    $("#cmd-msg").textContent = msg;
+  }
+});
+
+async function setMonitorOnly(id, on) {
+  try {
+    await api("/api/monitor-only", { method: "POST", body: JSON.stringify({ target_ids: [id], monitor_only: on }) });
+  } catch (e) {
+    alert(`Could not change it: ${e.message}`);
+    return;
+  }
+  for (const v of state.targets) if (v.target.id === id) v.monitor_only = on;
+  if (on) state.selected.delete(id);
+  render();
+}
+
 async function setHidden(id, hidden) {
   try {
     await api("/api/hidden", { method: "POST", body: JSON.stringify({ target_ids: [id], hidden }) });
@@ -894,10 +950,12 @@ document.addEventListener("click", (e) => {
     for (const id of state.selected) if (!state.targets.some((v) => v.target.id === id && matchesKpi(v, state.filter))) state.selected.delete(id);
     closeMachineMenu(); closeMachineInformation(); render(); return;
   }
-  const el = e.target.closest("[data-act],[data-toggle],[data-job],[data-hide],[data-stack]");
+  const el = e.target.closest("[data-act],[data-toggle],[data-job],[data-hide],[data-monitor],[data-stack],[data-cmd]");
   if (!el || el.disabled) return;
   closeMachineMenu();
   $("#dashboard-menu").open = false;
+  if (el.dataset.cmd) { editUpdateCommand(el.dataset.cmd); return; }
+  if (el.dataset.monitor) { setMonitorOnly(el.dataset.id, el.dataset.monitor === "1"); return; }
   if (el.dataset.stack) {
     const id = el.dataset.id, name = el.dataset.stack;
     const host = state.targets.find((v) => v.target.id === id)?.target.name || id;
