@@ -22,7 +22,7 @@ function machine(id, options = {}) {
   };
 }
 
-async function dashboard({ docker = false, containers = false, dockhandChecks = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
+async function dashboard({ docker = false, containers = false, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
   const { window, document } = parseHTML(read("index.html"));
   const calls = [], errors = [], storage = new Map([["dashboardView", JSON.stringify(rememberedView)]]);
   let activeElement = document.body;
@@ -32,7 +32,7 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
   window.HTMLElement.prototype.scrollIntoView = () => {};
   window.HTMLElement.prototype.showModal = function () { this.open = true; };
   window.HTMLElement.prototype.close = function () { this.open = false; };
-  const data = { targets, errors: {}, settings: { docker_enabled: docker, containers_visible: containers, dockhand_checks_allowed: dockhandChecks, snapshot_before_upgrade: true } };
+  const data = { targets, errors: {}, settings: { docker_enabled: docker, containers_visible: containers, dockhand_checks_allowed: dockhandChecks, scheduled_container_checks: scheduledContainers, snapshot_before_upgrade: true } };
   const mobileQuery = { matches: mobile, addEventListener: (event, callback) => { mobileQuery.onChange = callback; } };
   const sandbox = {
     window, document, URL, innerWidth: 1200, innerHeight: 800,
@@ -804,11 +804,11 @@ test("Dockhand explains read-only sync, saved history and explicit fresh checks 
     } })] });
     ui.click('[data-open-docker="docker"]');
     const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
-    assert.match(panel.textContent, /Dockhand owns its own schedule/);
-    assert.match(panel.textContent, /Automatic dashboard polling and Refresh inventory read saved reports/);
+    assert.match(panel.textContent, /Dockhand’s own schedule is unchanged/);
+    assert.match(panel.textContent, /Automatic dashboard polling and Refresh inventory only read saved results/);
     assert.match(panel.textContent, /saved across Fleetdeck restarts/);
     assert.match(panel.textContent, /Completed with 1 check error/);
-    assert.match(panel.textContent, /no result could be reliably matched/);
+    assert.match(panel.textContent, /no reliable result is available/);
     assert.equal(panel.querySelector('script'), null);
     assert.equal(panel.querySelector('[data-label="Last checked"]').title, 'From Dockhand scheduled-check history');
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
@@ -1185,4 +1185,58 @@ test("switching to Containers clears incompatible OS filters and keeps exact pro
   ui.click('#view-machines');
   assert.equal(ui.document.querySelectorAll('.scope-os').length, 2);
   assert.equal(ui.document.querySelector('.container-row'), null);
+});
+
+test("container help shows actual settings and the effective outcome for scheduled and manual checks", async () => {
+  const cases = [
+    { scheduled: false, allowed: true, interval: 21600, outcome: /scheduled rounds will not request container checks/ },
+    { scheduled: true, allowed: true, interval: 21600, outcome: /fresh Dockhand checks every 6 h/ },
+    { scheduled: true, allowed: false, interval: 21600, outcome: /Dockhand check permission is disabled/ },
+    { scheduled: true, allowed: true, interval: null, outcome: /schedule is off/ },
+    { scheduled: false, allowed: false, interval: null, outcome: /Manual fresh checks are disabled/ },
+  ];
+  for (const mobile of [false, true]) for (const item of cases) {
+    const ui = await dashboard({ containers: true, mobile, dockhandChecks: item.allowed,
+      scheduledContainers: item.scheduled, schedule: { check_every: item.interval }, targets: [machine('mapped', {
+        view: { dockhand: { stale: false, containers: [] } },
+      })] });
+    ui.click('[data-open-docker="mapped"]');
+    const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
+    const box = panel.querySelector('.container-check-settings');
+    const values = Object.fromEntries([...box.querySelectorAll('dl > div')].map(row => [row.querySelector('dt').textContent, row.querySelector('dd').textContent]));
+    assert.deepEqual(values, { 'Container provider': 'Dockhand', 'Fleetdeck scheduled container checks': item.scheduled ? 'On' : 'Off',
+      'Manual container checks': item.allowed ? 'Enabled' : 'Disabled', 'Fleetdeck check interval': item.interval ? 'Every 6 h' : 'Scheduling off' });
+    assert.match(box.querySelector('.container-check-outcome').textContent, item.outcome);
+    assert.match(box.textContent, /Dockhand’s own schedule is unchanged/);
+    assert.match(panel.querySelector('.container-help').textContent, /schedule.check_docker: true.*dockhand.allow_checks: true/);
+    assert.match(panel.querySelector('.container-help').textContent, /docker_enabled: false/);
+    assert.equal(panel.querySelector('.container-help a').getAttribute('href'), '/settings');
+    assert.equal(panel.querySelector('.container-help').hasAttribute('open'), false);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+    // Inventory refresh/re-render must update the displayed configuration, not retain fixed copy.
+    ui.data.settings.dockhand_checks_allowed = !item.allowed;
+    ui.render();
+    assert.match(ui.document.querySelector('.container-check-outcome').textContent, item.allowed ? /Manual fresh checks are disabled/ : /Manual fresh checks are enabled/);
+  }
+});
+
+test("native container guidance describes pulls and host policies without Dockhand configuration instructions", async () => {
+  for (const checkOnly of [false, true]) {
+    const ui = await dashboard({ docker: true, containers: true, scheduledContainers: true,
+      schedule: { check_every: 3600 }, targets: [machine('native', { target: { check_only: checkOnly },
+        check: { docker_installed: true }, view: { docker_settings: { mode: 'monitor' } },
+      })] });
+    ui.click('[data-open-docker="native"]');
+    const panel = ui.document.querySelector('.container-detail');
+    const box = panel.querySelector('.container-check-settings');
+    assert.match(box.textContent, /Fleetdeck native Docker · monitor only/);
+    assert.match(box.textContent, /Every 1 h/);
+    assert.match(box.querySelector('.container-check-outcome').textContent, checkOnly ? /native checks are disabled/ : /fresh Compose image checks every 1 h/);
+    const help = panel.querySelector('.container-help');
+    assert.match(help.textContent, /confirm image downloads/);
+    assert.match(help.textContent, /Update stack recreates affected running services/);
+    assert.doesNotMatch(help.textContent, /dockhand.allow_checks/);
+    assert.equal(panel.querySelector('[data-stack]'), null);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
 });

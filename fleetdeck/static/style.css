@@ -939,3 +939,13 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .machine-table > tbody.machine-rows > .container-row > td { border-top: 1px solid color-mix(in srgb, var(--border) 60%, var(--panel)); }
 .dashboard-page .machine-table > tbody.machine-rows > .pkgs > td,
 .dashboard-page .machine-table > tbody.machine-rows > .container-detail > td { border-top: 1px solid var(--border); }
+
+.container-check-settings { margin: 10px 0; padding: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.container-check-settings > strong { font-weight: 600; }
+.container-check-settings dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; margin: 9px 0; }
+.container-check-settings dt { color: var(--muted); font-weight: 400; }
+.container-check-settings dd { margin: 3px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.container-check-outcome { margin: 8px 0 0; color: var(--text-2); }
+.container-schedule-report { margin: 8px 0; font-size: 12px; }
+.container-help code { overflow-wrap: anywhere; }
+@media(max-width:700px) { .container-check-settings dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

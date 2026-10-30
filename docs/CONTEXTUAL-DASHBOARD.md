@@ -92,7 +92,7 @@ its provider status; the existing OS notification report is not extended to send
 
 Both the inline details and Containers tab use the same compact panel, flat table sorted by Stack
 then container/service name, and All / Review / Coverage / Failures filters. The explanation lives
-in collapsed **How checks work** help; the summary, active warnings and provider scope stay visible.
+in collapsed **Options and how to change them** help; the summary, active warnings and provider scope stay visible.
 Native controls preserve the original pull confirmation, prune preference, stack-update confirmation,
 monitor-only restrictions and dashboard self-update protection. Native checks do not provide
 standalone checks or newer-version-tag detection; the panel explicitly states those limitations.
@@ -541,3 +541,24 @@ and mobile, merged-cell accounting with both details open, independent check age
 missing/local/failed results, scoped menus, read-only tab changes, OS-only selections and deployment
 guards. Local browser review used simulated machines at 1440/1120 px and mobile cards at 390 px.
 No configuration, scheduler behavior, backend actions or live infrastructure was changed.
+
+### Clear check options and live settings
+
+Container details begin their guidance with a visible **Current settings** summary: provider,
+Fleetdeck scheduled-container flag, manual-check permission and the configured Fleetdeck interval.
+The values come from authenticated inventory settings and `/api/schedule`; they are never assumed
+from a cached result or a Dockhand execution time. The outcome explains when the flag is on but
+the scheduler is off, provider permission is disabled, or the target is check-only. Native monitor
+policy remains visible. Dockhand-only instructions explicitly retain `docker_enabled: false`.
+
+Collapsed **Options and how to change them** explains three Dockhand choices: use Dockhand’s own
+schedule, additionally request checks on Fleetdeck’s schedule, or enable manual checks. Each
+choice names the required setting and its outcome. The Settings link opens the existing editor;
+the help does not change configuration. Native guidance instead explains image downloads, Compose
+coverage, host policies and confirmed stack updates. Scheduled history stays separate from the
+configuration summary. Results, timestamps, persistence and OS-only Update scope use short plain
+explanations. No check endpoints, schedules, configuration or deployment behavior changed.
+
+All 50 offline UI tests and Ruff checks pass. Added cases cover live settings updates, scheduling
+off, blocked permission, enabled scheduled checks, native monitor/check-only policies and both
+mobile and desktop details without starting any action.
