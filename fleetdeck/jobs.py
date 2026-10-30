@@ -45,7 +45,7 @@ REBOOT_POLL = 5.0
 # the re-check after a reboot is retried this many times before it is reported as failed.
 RECHECK_TRIES = 6
 # What a guest can be doing that stops its host from being updated or rebooted.
-GUEST_ACTIONS_BLOCKING_HOST = ("upgrade", "stack-update", "reboot", "rollback")
+GUEST_ACTIONS_BLOCKING_HOST = ("start", "upgrade", "stack-update", "reboot", "rollback")
 # What a monitor-only machine never runs: installing OS, app or Docker updates.
 UPDATES = ("upgrade", "stack-update")
 
@@ -300,6 +300,22 @@ class JobManager:
                 return job
         return None
 
+    def _ensure_can_start(self, target: Target) -> None:
+        if (
+            target.platform != "proxmox"
+            or target.kind not in ("vm", "lxc")
+            or target.status != "stopped"
+            or not target.can_start
+            or target.id not in self.inventory.power
+        ):
+            raise ValueError(f"{target.name}: only eligible stopped Proxmox VMs and LXCs can be started")
+        host = self._host_id(target)
+        parent_job = self.active_job(host) if host else None
+        if parent_job and parent_job.action in ("upgrade", "reboot", "rollback"):
+            raise ValueError(f"{target.name}: its host is busy; wait before booting the guest")
+        if why := self.update_blocked(target):
+            raise ValueError(f"{target.name}: {why}")
+
     def submit(
         self,
         target_id: str,
@@ -314,7 +330,9 @@ class JobManager:
     ) -> Job:
         target, executor = self.inventory.get(target_id)
         self._ensure_docker_action(target_id, action)
-        if action == "rollback":
+        if action == "start":
+            self._ensure_can_start(target)
+        elif action == "rollback":
             _ensure_can_roll_back(target, self.inventory.snapshots.get(target_id))
             if not snapshot:
                 raise ValueError(f"{target.name}: no snapshot to roll back to")
@@ -402,7 +420,9 @@ class JobManager:
                     target, executor = self.inventory.get(job.target_id)
                 except KeyError:
                     raise RuntimeError("target no longer exists") from None
-                if job.action == "rollback":
+                if job.action == "start":
+                    self._ensure_can_start(target)
+                elif job.action == "rollback":
                     _ensure_can_roll_back(target, self.inventory.snapshots.get(job.target_id))
                 elif job.action == "backup":
                     _ensure_can_back_up(target, self.inventory.backup_runs.get(job.target_id))
@@ -412,7 +432,14 @@ class JobManager:
                     self._ensure_updates_allowed(target, job.action)
                 if job.action in ("upgrade", "reboot"):
                     await self._wait_unblocked(job, target, slot)
-                if job.action == "backup":
+                if job.action == "start":
+                    job.log.append(f"== Starting {target.name} through Proxmox")
+                    try:
+                        await self.inventory.power[target.id].start()
+                        job.log.append("== Proxmox confirms the guest is running; guest services may still be starting")
+                    finally:
+                        self.inventory.invalidate()
+                elif job.action == "backup":
                     job.log.append(
                         f"== Backing up {target.name}"
                         + (

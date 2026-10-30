@@ -549,8 +549,8 @@ a.brand { color: var(--text); text-decoration: none; }
 /* Width budget: icon + four-digit count + padding; longest standard status
    (Updates available / updating Docker…), Reboot action, and relative check age.
    Content budgets scale together at wider viewports; long names/counts retain full labels. */
-.dashboard-page .machine-table { min-width: 958px; table-layout: fixed; }
-.dashboard-page .machine-table.has-backup { min-width: 1056px; }
+.dashboard-page .machine-table { min-width: 946px; table-layout: fixed; }
+.dashboard-page .machine-table.has-backup { min-width: 1044px; }
 .dashboard-page .machine-table col.col-select { width: 30px; }
 .dashboard-page .machine-table col.col-machine { width: 230px; }
 .dashboard-page .machine-table col.col-scope { width: 90px; }
@@ -558,7 +558,7 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .machine-table col.col-updates { width: 188px; }
 .dashboard-page .machine-table col.col-checked { width: 112px; }
 .dashboard-page .machine-table col.col-backup { width: 98px; }
-.dashboard-page .machine-table col.col-actions { width: 144px; }
+.dashboard-page .machine-table col.col-actions { width: 132px; }
 .dashboard-page .machine-table > thead > tr > th { white-space: nowrap; padding-inline: 6px; letter-spacing: 0; vertical-align: middle; }
 .dashboard-page .machine-table > tbody > .machine-row > td { height: 62px; padding: 8px 6px; white-space: nowrap; }
 .dashboard-page .machine-table > tbody > .machine-row > td:first-child { padding-left: 14px; padding-right: 5px; }
@@ -874,7 +874,7 @@ a.brand { color: var(--text); text-decoration: none; }
 /* A machine shares identity and backup context across independent OS/container rows. */
 .dashboard-page .machine-table > tbody.machine-rows > tr > td { padding: 10px 6px; vertical-align: middle; }
 .dashboard-page .machine-table > tbody.machine-rows > tr.container-row > td { height: 54px; background: color-mix(in srgb, var(--panel-2) 35%, var(--panel)); border-top-color: color-mix(in srgb, var(--border) 60%, var(--panel)); }
-.dashboard-page .machine-table .row-actions-heading { text-align: right; }
+.dashboard-page .machine-table .row-actions-heading { text-align: left; }
 .machine-cell-inner { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .machine-cell-inner > .machine-main { min-width: 0; flex: 1; }
 .machine-info-controls { display: inline-flex; align-items: center; flex: none; gap: 2px; }
@@ -885,7 +885,7 @@ a.brand { color: var(--text); text-decoration: none; }
 .os-metrics, .scope-backup { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; }
 .dashboard-page .os-metrics .update-list-hit { width: auto; min-width: 28px; min-height: 32px; padding: 0; }
 .dashboard-page .scope-metrics .container-indicators { justify-content: flex-start; margin: 0; max-width: none; }
-.scope-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 5px; }
+.scope-actions { display: flex; justify-content: flex-start; align-items: center; flex-wrap: wrap; gap: 5px; }
 .scope-actions .primary-action:empty { display: none; }
 .scope-actions .primary-action > button { width: 84px; justify-content: center; }
 .scope-actions .more-actions { flex: none; }
@@ -957,7 +957,7 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .os-metrics .update-metric, .dashboard-page .container-indicators .update-metric { gap: 4px; padding-inline: 3px; min-width: 0; max-width: 100%; }
 .dashboard-page .container-indicators .container-review, .dashboard-page .container-indicators .container-coverage, .dashboard-page .update-metric.container, .dashboard-page .container-indicators button.container-failure { background: transparent; }
 .dashboard-page .container-indicators .update-metric.container-failure { background: color-mix(in srgb, var(--bad) 11%, var(--panel)); }
-.container-review-tone, .container-indicators .container-review { color: var(--warn); }
+.container-review-tone, .container-indicators .container-review { color: var(--review); }
 .dashboard-page .container-indicator:hover .update-metric { background: var(--chip); }
 .dashboard-page .machine-table > tbody.machine-rows:hover > tr:is(.scope-os, .container-row) > td { background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
 .dashboard-page .machine-table > tbody.machine-rows:has(.is-selected):hover > tr:is(.scope-os, .container-row) > td { background: color-mix(in srgb, var(--accent) 11%, var(--panel)); }
@@ -981,3 +981,20 @@ a.brand { color: var(--text); text-decoration: none; }
 
 .more-actions { position: relative; }
 .menu-warning-dot { position: absolute; top: 2px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
+
+/* Match typography across independent OS and container scope rows. */
+:root { --review: #0e7490; }
+:root[data-theme="dark"] { --review: #67e8f9; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --review: #67e8f9; } }
+.dashboard-page .os-status-hit, .dashboard-page .container-status-hit { font: inherit; }
+.dashboard-page .os-status-hit .status-inline, .dashboard-page .container-status-hit .status-inline { font-size: 13px; font-weight: 500; }
+.dashboard-page .scope-metrics .update-metric, .mc-card .update-metric { font-size: 13px; font-weight: 500; }
+.dashboard-page .scope-metrics .update-metric .ui-icon, .mc-card .update-metric .ui-icon { width: 16px; height: 16px; }
+.machine-information { overflow-y: auto; }
+
+/* Reserve only the space required by the longest action in this view. */
+.dashboard-page .machine-table.has-manager-actions col.col-actions { width: 156px; }
+.dashboard-page .machine-table.has-manager-actions { min-width: 970px; }
+.dashboard-page .machine-table.has-manager-actions.has-backup { min-width: 1068px; }
+.scope-actions > button.small:not(.more-actions) { width: 84px; padding-inline: 6px; justify-content: center; }
+.dashboard-page .update-status-cell .status-inline, .dashboard-page .container-status-cell .status-inline { font-size: 13px; font-weight: 500; }

@@ -262,7 +262,7 @@ def create_app(
                 )
         views = [
             TargetView(
-                target=t,
+                target=t.model_copy(update={"can_start": False}) if t.can_start and t.id not in inventory.power else t,
                 check=(check := jobs.checks.get(t.id)),
                 active_job=_light(jobs.active_job(t.id)),
                 hidden=t.id in jobs.hidden,

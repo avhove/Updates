@@ -263,7 +263,7 @@ test("update columns separate security, packages and phased updates with only re
   assert.match(doc.querySelector("#schedule-status").textContent, /Next check in 2 h/);
 
   ui.click('[data-machine-row="pve"] .update-metric.security');
-  assert.deepEqual([...doc.querySelectorAll("#packages-pve .package-type")].map((el) => el.textContent.trim()), ["Security", "Package", "Phased", "Waiting"]);
+  assert.deepEqual([...doc.querySelectorAll("#packages-pve .package-type")].map((el) => el.textContent.trim()), ["Security"]);
   ui.click('[data-machine-menu="pve"]');
   assert.match(doc.querySelector("#machine-actions").textContent, /Reboot/);
   assert.match(doc.querySelector("#machine-actions").textContent, /Check OS updates/);
@@ -287,9 +287,11 @@ test("compact OS metrics and status open one package list without selection or a
   const status = ui.click('[data-machine-row="pending"] .os-status-hit');
   assert.equal(doc.querySelectorAll("#packages-pending").length, 1);
   assert.match(doc.querySelector("#packages-pending").textContent, /curl/);
-  assert.ok([...doc.querySelectorAll('[data-machine-row="pending"] [data-toggle]')].every(b => b.getAttribute("aria-expanded") === "true"));
+  assert.equal(doc.querySelector('[data-machine-row="pending"] .os-status-hit').getAttribute("aria-expanded"), "true");
   assert.equal(ui.state.selected.size, 0);
   assert.equal(ui.calls.some(call => call.method === "POST"), false);
+  ui.click('[data-machine-row="pending"] .update-list-hit');
+  assert.ok(doc.querySelector("#packages-pending"));
   ui.click('[data-machine-row="pending"] .update-list-hit');
   assert.equal(doc.querySelector("#packages-pending"), null);
   assert.ok(status.getAttribute("aria-controls"));
@@ -614,11 +616,11 @@ test("optional Docker status is separate, honest about failed checks, and never 
   assert.equal(dockerTable.classList.contains("has-backup"), true);
   assert.equal(dockerTable.classList.contains("has-containers"), true);
   assert.equal(dockerTable.querySelectorAll("colgroup > col").length, 8);
-  assert.equal(ui.document.querySelectorAll('.container-indicator[data-open-docker][data-container-filter="all"]').length, 1);
+  assert.equal(ui.document.querySelectorAll('.container-indicator[data-open-docker][data-container-filter="updates"]').length, 1);
   ui.click('[data-open-docker="docker-vm"]');
   assert.equal(ui.document.querySelector("#groups").hidden, false);
   assert.match(ui.document.querySelector(".container-detail").textContent, /Stack image check failed/);
-  assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="docker-vm"]').getAttribute('aria-expanded'), 'true');
+  assert.equal(ui.document.querySelector('.container-status-hit[data-open-docker="docker-vm"]').getAttribute('aria-expanded'), 'true');
   assert.equal(ui.document.querySelectorAll("[data-stack]").length, 0);
   assert.equal(ui.calls.some((call) => call.path === "/api/actions"), false);
   ui.click("[data-fetch-docker]");
@@ -755,7 +757,8 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
     const row = ui.document.querySelector('[data-machine-row="appliance"]');
     const badge = row.querySelector('.monitor-policy[aria-label="Monitor only"]');
     assert.ok(badge);
-    assert.equal(badge.previousElementSibling.className, "machine-name");
+    assert.equal(badge.previousElementSibling.classList.contains("type-chip"), true);
+    assert.equal(badge.nextElementSibling, null);
     assert.equal(badge.textContent.trim(), "");
     ui.informationTrigger('appliance'); ui.click('[data-machine-info=\"appliance\"]');
     assert.match(ui.document.querySelector('#machine-information').textContent, /Update policy is managed in configuration/);
@@ -952,7 +955,7 @@ test("compound container indicators preserve updates, version advisories, covera
       dockhand: { synced_at: now, stale: false, containers: rows }, docker_settings: { mode: 'external', manager_name: 'Dockhand' },
     } })] });
     const badge = filter => ui.document.querySelector(`.container-indicator[data-open-docker="mixed"][data-container-filter="${filter}"]`);
-    assert.equal(badge('all').textContent, '2');
+    assert.equal(badge('updates').textContent, '2');
     assert.equal(badge('review').textContent, '4');
     assert.equal(badge('coverage').textContent, '3');
     assert.equal(badge('failures').textContent, '1');
@@ -990,7 +993,7 @@ test("local-only and offline cases keep coverage and connection separate from co
       { name: 'old', image: 'old:1', status: 'update', checked_at: now },
     ] } } }),
   ] });
-  assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="healthy-local"][data-container-filter="all"]').textContent, '0');
+  assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="healthy-local"][data-container-filter="updates"]').textContent, '0');
   assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="healthy-local"][data-container-filter="coverage"]').textContent, '1');
   assert.match(ui.document.querySelector('.container-indicator[data-open-docker="unreachable"]').textContent, /—/);
   assert.ok(ui.document.querySelector('.container-indicator[data-open-docker="checking"] .update-metric'));
@@ -1266,7 +1269,7 @@ test("update metrics keep four stable slots and the top legend follows the selec
     }
     const metrics = doc.querySelector('.container-indicators');
     assert.equal(metrics.children.length,4);
-    assert.equal(metrics.children[0].dataset.containerFilter,'all');
+    assert.equal(metrics.children[0].dataset.containerFilter,'updates');
     assert.equal(metrics.children[1].dataset.metricSlot,'review');
     assert.equal(metrics.children[2].dataset.metricSlot,'coverage');
     assert.equal(metrics.children[3].dataset.metricSlot,'failures');
@@ -1353,4 +1356,87 @@ test("snapshot defaults follow settings and command configuration cannot be edit
   assert.equal(ui.document.querySelector('#cmd-command').disabled, true);
   assert.equal(ui.document.querySelector('#cmd-save').disabled, true);
   assert.equal(ui.document.querySelector('#cmd-config').hidden, false);
+});
+
+test("OS metrics filter packages while status restores all types on desktop and mobile", async () => {
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ mobile, targets: [machine('filter-os', { check: { packages: [
+      { name: 'security-fix', available: '2', security: true },
+      { name: 'regular-fix', available: '2' },
+      { name: 'phased-fix', available: '2', phased: true },
+      { name: 'waiting', available: '2', phased: true, phased_dependency: true },
+    ] } })] });
+    const names = () => [...ui.document.querySelectorAll('.packages-table .package-name')].map(el => el.textContent);
+    for (const [filter, expected] of [['security', ['security-fix']], ['package', ['regular-fix']], ['phased', ['phased-fix', 'waiting']]]) {
+      ui.click(`[data-package-filter="${filter}"]`);
+      assert.deepEqual(names(), expected);
+    }
+    ui.click('.os-status-hit');
+    assert.equal(names().length, 4);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
+});
+
+test("container image metric filters updates and status restores all, with current options collapsed", async () => {
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ mobile, containers: true, targets: [machine('filter-containers', { view: { dockhand: {
+      synced_at: now, containers: [
+        { name: 'needs-update', image: 'web:1', status: 'update', checked_at: now },
+        { name: 'current', image: 'db:1', status: 'current', checked_at: now },
+        { name: 'local', image: 'local:dev', status: 'local' },
+      ],
+    } } })] });
+    ui.click('[data-container-filter="updates"]');
+    const panel = () => ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
+    assert.equal(panel().querySelectorAll('.container-results-table tbody tr').length, 1);
+    assert.match(panel().textContent, /needs-update/);
+    ui.click('.container-status-hit');
+    assert.equal(panel().querySelectorAll('.container-results-table tbody tr').length, 3);
+    const help = panel().querySelector('.container-help');
+    assert.equal(help.querySelector('summary').textContent, 'Current options and how to change them');
+    assert.equal(help.hasAttribute('open'), false);
+    assert.ok(help.querySelector('.container-check-settings'));
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
+});
+
+test("backup schedule tooltip, monitor badge order and information popup use visible More anchor", async () => {
+  const ui = await dashboard({ targets: [machine('info-anchor', { guest: true, target: {
+    backup: { last: now, in_job: true }, monitor_only: true,
+  }, view: { monitor_only: true } })] });
+  assert.match(ui.document.querySelector('.backup-job').getAttribute('title'), /schedule coverage, not that the last backup succeeded/);
+  const badge = ui.document.querySelector('.monitor-policy');
+  assert.equal(badge.nextElementSibling, null);
+  assert.ok(badge.previousElementSibling.classList.contains('type-chip'));
+  const more = ui.document.querySelector('[data-machine-menu]');
+  more.getBoundingClientRect = () => ({ right: 400, top: 280, bottom: 300 });
+  const info = ui.document.querySelector('#machine-information');
+  Object.defineProperty(info, 'offsetHeight', { value: 120 });
+  Object.defineProperty(info, 'offsetWidth', { value: 260 });
+  ui.click('[data-machine-menu]');
+  ui.click('[data-machine-info]');
+  assert.equal(info.style.top, '306px');
+  assert.equal(info.style.left, '140px');
+});
+
+test("Boot up is scoped to eligible stopped Proxmox guests and requires explicit confirmation", async () => {
+  for (const mobile of [false, true]) {
+    const targets = [machine('stopped-vm', { guest: true, target: { can_start: true, status: 'stopped', updatable: false } }),
+      machine('offline-node', { target: { can_start: true, status: 'offline', updatable: false } }),
+      machine('protected', { guest: true, target: { status: 'stopped', updatable: false } })];
+    const ui = await dashboard({ mobile, targets });
+    assert.equal(ui.document.querySelectorAll('[data-act="start"]').length, 1);
+    ui.click('[data-act="start"]');
+    assert.equal(ui.document.querySelector('#confirm').open, true);
+    assert.match(ui.document.querySelector('#confirm-text').textContent, /No updates are installed/);
+    assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+    const dialog = ui.document.querySelector('#confirm');
+    dialog.returnValue = 'cancel'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+    assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+    ui.click('[data-act="start"]');
+    dialog.returnValue = 'ok'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+    const request = ui.calls.find(c => c.path === '/api/actions');
+    assert.equal(JSON.parse(request.body).action, 'start');
+    assert.deepEqual(JSON.parse(request.body).target_ids, ['stopped-vm']);
+  }
 });

@@ -543,7 +543,7 @@ No configuration, scheduler behavior, backend actions or live infrastructure was
 
 ### Clear check options and live settings
 
-Container details begin their guidance with a visible **Current settings** summary: provider,
+Container details include a collapsed **Current options and how to change them** section with a **Current settings** summary: provider,
 Fleetdeck scheduled-container flag, manual-check permission and the configured Fleetdeck interval.
 The values come from authenticated inventory settings and `/api/schedule`; they are never assumed
 from a cached result or a Dockhand execution time. The outcome explains when the flag is on but
@@ -619,3 +619,40 @@ downloaded bootstrap execution and GNU script). All 55 offline frontend tests pa
 custom command escaping and OS-only menu placement alongside Dockhand, configuration-locked
 monitor controls, snapshot defaults, mixed providers and read-only inventory refreshes.
 Ruff lint/format and diff checks passed. No real machine or external manager was contacted.
+
+
+### Filtered details, compact options and Proxmox guest boot
+
+OS update metrics now open the corresponding Security, Packages or Phased list (including related
+Waiting packages). Clicking the OS status opens the complete package list. Container image-update,
+review, coverage and failure metrics likewise filter their details; clicking container status opens
+all results. These navigation actions never request checks or install updates.
+
+The original upstream Docker cube replaces the three-box icon. The legend says Reboot required;
+Review uses teal/cyan, separate from the yellow reboot indicator. OS and container status labels
+and update counts share typography and icon dimensions. Action headings align with actions, and
+column width follows the longest supported action in the current view (compact native actions or
+external manager link). Machine information anchors to the visible More button and is constrained
+to the viewport. Current settings and the configuration explanation are together in the collapsed
+Current options and how to change them section. Backup schedule icons explain coverage on hover,
+without implying a successful backup. Monitor-only badges follow all other machine badges.
+
+**Boot up** is a confirmed, separately logged action for stopped, unprotected Proxmox VMs and LXCs
+on an online node. It uses the configured Proxmox API client and needs VM.Audit and VM.PowerMgmt
+permissions; no SSH, guest agent or new credential is needed. It never changes token privileges,
+forces locks, starts protected/excluded/template guests, wakes an offline hypervisor or installs
+updates. Monitor-only allows booting just as it allows rebooting. The host's active upgrade/reboot
+blocks a boot, and guest boot jobs block a host reboot/upgrade until finished. Eligibility is
+checked at submission and execution; Proxmox status is re-read before the single start request.
+The job waits for the Proxmox task and a running guest state, which does not imply guest services
+are ready. Inventory is invalidated afterwards. Failed discovery revokes start handles; timeouts
+are reported as uncertain and are never retried or resumed automatically. Polling never starts guests.
+
+Verification: 59 offline frontend tests passed. The full backend run passed 506 tests, skipped 6
+and deselected the same 7 documented macOS/system-dependent checks. An additional API-capability
+regression passed in the 38-test app/power run (1 skip, 1 boot-ID deselection). Coverage includes
+both Proxmox guest kinds, protected/template/excluded targets, missing permissions, stale status,
+timeouts without retries, queued-policy changes, parent-job blocking, failed discovery and
+boot confirmation/cancellation. Browser verification used simulated data only at desktop and
+390px: no page overflow, matching 13px status/count text and 16px metric icons, compact options,
+and an information popup anchored to the visible More button. Ruff and diff checks passed.

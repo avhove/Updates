@@ -49,6 +49,8 @@ class Target(BaseModel):
     no_reboot: str | None = None
     # A Proxmox/Incus guest that can be snapshotted and rolled back.
     can_snapshot: bool = False
+    # A stopped, unprotected Proxmox guest; starting does not require guest execution.
+    can_start: bool = False
     # A host the "Back up" button works on (see backup_runs.py).
     can_backup: bool = False
     # Set monitor-only in the config: checked as usual, never updated from here (see JobManager.monitor_only).
@@ -178,7 +180,7 @@ class StacksResult(BaseModel):
     error: str | None = None
 
 
-JobAction = Literal["check", "upgrade", "reboot", "rollback", "backup", "stacks", "stack-update"]
+JobAction = Literal["start", "check", "upgrade", "reboot", "rollback", "backup", "stacks", "stack-update"]
 JobStatus = Literal["queued", "running", "succeeded", "failed"]
 
 
