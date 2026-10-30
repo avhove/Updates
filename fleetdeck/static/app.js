@@ -202,7 +202,7 @@ function machineInfoButton(t, c) {
 
 function updatesLegend() {
   const item = (symbol, label, tone = "", tip = "") => `<span class="updates-legend-item"${tip ? ` title="${esc(tip)}"` : ""}><span class="${tone}">${icon(symbol)}</span>${label}</span>`;
-  const os = state.view !== "containers" ? `<div class="updates-legend-group"><strong>OS</strong>${item("shield", "Security", "bad")}${item("package", "Packages")}${item("clock", "Phased")}${item("reboot", "Reboot", "reboot-tone")}</div>` : "";
+  const os = state.view !== "containers" ? `<div class="updates-legend-group"><strong>OS</strong>${item("shield", "Security", "bad")}${item("package", "Packages")}${item("clock", "Phased", "ok", "Waiting for phased rollout; no action needed yet")}${item("reboot", "Reboot", "reboot-tone")}</div>` : "";
   const containers = containersVisible() && state.view !== "machines" ? `<div class="updates-legend-group"><strong>Containers</strong>${item("boxes", "Image updates", "container-tone")}${item("tag", "Review", "container-review-tone", "New version tags, pinned digests or held updates")}${item("coverage", "Coverage gaps", "muted", "Local, excluded or unmatched containers; native checks cover Compose only")}${item("alert", "Failed checks", "bad")}</div>` : "";
   return os + containers;
 }
