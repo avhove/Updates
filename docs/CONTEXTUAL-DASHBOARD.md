@@ -704,3 +704,13 @@ Updates 224px; ordinary metric groups have 14px gaps and share a line. The 1120p
 Existing tokens stay absent from the dialog, Save exposes Apply separately and starts no checks,
 and all metadata and validation responses keep tokens private. Current options show running
 settings; the dialog shows saved pending configuration until Apply. No homelab was contacted.
+
+
+### Container menu scope and glyph alignment
+
+Container-row More menus offer container checks and View container details (a distinct list icon).
+Machine information, Docker management and the machine-wide monitor-only toggle stay in the
+machine/OS menu. Both desktop and mobile preserve these scopes. The Updates cells share the same
+horizontal inset; package, container and reboot glyphs use 16px boxes and a 3px inset so the first
+visible icon aligns across rows. Packed 14px spacing and count order remain unchanged.
+All 65 offline UI tests pass. Simulated browser measurements confirm matching insets and sizes.

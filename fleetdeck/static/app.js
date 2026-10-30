@@ -21,6 +21,7 @@ const ICON = {
   package: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   backup: '<path d="M3 6h18"/><path d="M19 6v14H5V6"/><path d="M8 3h8l1 3H7Z"/><path d="M9 11h6"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   terminal: '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
   eye: '<path d="M2.1 12a10.8 10.8 0 0 1 19.8 0 10.8 10.8 0 0 1-19.8 0Z"/><circle cx="12" cy="12" r="3"/>',
   eyeOff: '<path d="m3 3 18 18"/><path d="M10.6 10.6A2 2 0 0 0 13.4 13.4"/><path d="M9.9 4.2A10.7 10.7 0 0 1 21.9 12a10.5 10.5 0 0 1-2.1 3.1"/><path d="M6.2 6.2A10.8 10.8 0 0 0 2.1 12a10.8 10.8 0 0 0 12 7.8"/>',
@@ -485,12 +486,12 @@ function openMachineMenu(id, trigger) {
         "Fleetdeck native checks pull Compose images; confirmation is required") : "") +
     (containerOnly || nextAction(v).includes('data-act="reboot"') ? "" : action("reboot", "Reboot", "reboot", canReboot(t) && !busy && !v.blocked, t.no_reboot || v.blocked || t.note)) +
     (!containerOnly && t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
-    `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` +
+    (!containerOnly ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
     (!containerOnly && canUpgrade(t) ? `<button data-cmd="${esc(id)}" title="${esc(v.update_command ? `Update runs: ${v.update_command}` : "Use the machine's own update command instead of the built-in OS upgrade")}">${icon("settings")}Update command…</button>` : "") +
-    `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` +
+    (!containerOnly ? `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` : "") +
     (!containerOnly && state.console?.enabled && !["stopped", "offline"].includes(t.status) ? `<button data-run="${esc(id)}">${icon("terminal")}Run command</button>` : "") +
-    (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("container")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
-  menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
+    (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("list")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
+  if (!containerOnly) menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
   machineMenuId = id;
   machineMenuFocus = trigger.dataset.focusKey;
   trigger.setAttribute("aria-expanded", "true");

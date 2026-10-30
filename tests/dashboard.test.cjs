@@ -1183,6 +1183,7 @@ test("All, Machines and Containers share layout while rendering only their own s
     assert.equal(doc.querySelector('#bulk-toolbar').hidden, true);
     assert.equal(ui.state.selected.size, 0);
     assert.deepEqual([...doc.querySelectorAll('[data-machine-row]')].map(r => r.dataset.machineRow), ['apps']);
+    ui.click('#view-machines');
     assert.ok(ui.informationTrigger('apps'));
     if (!mobile) assert.equal(doc.querySelector('.machine-cell').hasAttribute('rowspan'), false);
     ui.click('#view-all');
@@ -1546,4 +1547,22 @@ test("container overview consolidates counts and keeps history inside current op
   assert.match(panel().querySelector('.container-results-table').textContent, /current-app/);
   assert.doesNotMatch(panel().querySelector('.container-results-table').textContent, /new-app/);
   assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+});
+
+test("container menus omit machine information and provider management and use a distinct details icon", async () => {
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ mobile, dockhandChecks: true, targets: [machine('scoped-menu', { view: {
+      dockhand: { synced_at: now, containers: [] }, docker_settings: { mode: 'external', manager_name: 'Dockhand' },
+    } })] });
+    ui.click('[data-machine-menu="scoped-menu"][data-menu-scope="containers"]');
+    const menu = ui.document.querySelector('#machine-actions');
+    assert.equal(menu.querySelectorAll('[data-machine-info],[data-docker-settings],[data-monitor]').length, 0);
+    const details = menu.querySelector('[data-open-docker]');
+    const check = menu.querySelector('[data-act="dockhand"]');
+    assert.match(details.textContent, /View container details/);
+    assert.notEqual(details.querySelector('svg').innerHTML, check.querySelector('svg').innerHTML);
+    ui.click('[data-machine-menu="scoped-menu"][data-menu-scope="machine"]');
+    assert.ok(menu.querySelector('[data-machine-info]'));
+    assert.ok(menu.querySelector('[data-docker-settings]'));
+  }
 });
