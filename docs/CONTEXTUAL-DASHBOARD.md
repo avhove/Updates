@@ -38,10 +38,9 @@ the existing authenticated Settings editor, so protect access to that page as be
 
 Dockhand integration is opt-in and polls only while the dashboard requests inventory, at most
 once per interval per process during ordinary polling. **Refresh inventory** bypasses that
-interval to fetch the latest cached Dockhand reports immediately. The GET request itself is
-read-only. With `dockhand.allow_checks: true`, the menu is labelled **Refresh inventory & check
-Dockhand** and then separately requests fresh digest checks for visible mapped environments.
-It skips checks already running and does not change Dockhand's schedule. Results of checks run by Dockhand appear on the next
+interval to fetch the latest cached Dockhand reports immediately. **Refresh inventory** only
+rediscovers machines and reads saved reports, even when `dockhand.allow_checks` is enabled.
+It does not trigger an OS or registry update check. Results of checks run by Dockhand appear on the next
 successful sync when exposed by its cached API; missing successful-check history remains unknown.
 Ordinary automatic polling and inventory GETs use only read-only requests: `GET /api/containers?env=ID`,
 `GET /api/containers/pending-updates?env=ID`, and the scheduled-check history described below. It never automatically triggers checks, pulls, deployments,
@@ -64,7 +63,7 @@ The Docker details panel explains the mechanism directly:
   A successful run with container errors is labelled as having errors, never blanket success.
 - **Last checked**: a container's confirmed result time, with a tooltip identifying its source.
 - **Check in Dockhand**: the existing opt-in, confirmed request for a fresh registry check.
-  The labelled manual refresh menu also requests fresh checks when enabled.
+  **Check all** requests OS and Dockhand checks; the dashboard container-only menu requests Dockhand checks only.
   It queries registry digests and metadata; it does not download image layers, change schedules,
   deploy images or restart containers.
 - **Unknown / No confirmed check result**: no result can be reliably matched to this container.
@@ -88,10 +87,12 @@ OS checks never press the Dockhand button. With `allow_checks: true`, manual con
 
 | Control | OS checks | Fresh Dockhand digest checks |
 | --- | --- | --- |
-| Top **Check updates** | Yes | Yes |
+| Top **Check all** | Yes | Yes |
 | Menu **Check OS updates** | Yes | No |
 | Menu **Check container updates** | No | Yes |
-| Menu **Refresh inventory & check Dockhand** | Inventory refresh only | Yes |
+| Menu **Refresh inventory** | Inventory refresh only | No |
+| Machine menu **Check OS updates** | This machine only | No |
+| Machine menu **Check container updates** | No | This machine only |
 | Per-machine **Update** | Installs OS packages | No |
 
 The container-only menu entry is disabled when explicit checks are not enabled, and is hidden
@@ -108,9 +109,8 @@ Unsupported future log formats remain unknown instead of being guessed healthy.
 
 Set `dockhand.allow_checks: true` and apply/restart to enable **Check in Dockhand**. Keep
 `docker_enabled: false` when using Dockhand only. The check button opens a confirmation naming
-the mapped machine. Confirming that dialog, or explicitly clicking the labelled **Refresh
-inventory & check Dockhand** / **Check container updates** menu item or top **Check updates**
-button, uses the authenticated, CSRF-protected `POST /api/dockhand/check` endpoint for each
+the mapped machine. Confirming that dialog, or explicitly clicking the dashboard's
+**Check container updates** menu item or top **Check all** button, uses the authenticated, CSRF-protected `POST /api/dockhand/check` endpoint for each
 exact configured environment.
 Browser input cannot supply a manager URL, environment ID or arbitrary API path.
 
@@ -234,7 +234,7 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   Clicking a card filters the machine list; clicking it again clears the filter. Parent nodes
   remain visible for context, with selection and the main action disabled when they do not match.
   KPI totals continue to describe the full inventory. Selections outside a filter are cleared.
-- A short toolbar: **Check updates**, with less frequent tasks in a compact icon-led menu.
+- A short toolbar: **Check all**, with less frequent tasks in a compact icon-led menu.
   The menu separates inventory tasks from backup and notification tools, and marks the
   optional hidden-machine view without changing the menu label.
 - Single-line rows combine machine/state, type and a compact OS label in one flexible cell;
@@ -443,9 +443,10 @@ this environment. No real homelab machines were contacted or updated during deve
 ### Dockhand history and manual-check verification
 
 The focused Dockhand/history/store/settings/app suite passes 89 tests, with one existing skip
-and one Linux boot-ID test deselected. All 36 offline UI tests pass. Coverage includes scheduled
+and one Linux boot-ID test deselected. All 38 offline UI tests pass. Coverage includes scheduled
 summary errors, timestamped individual outcomes, duplicate/truncated logs, recreated containers,
 policy exclusions, redirects/permissions, persistence and corrupt/mismatched caches, newer-report
-precedence, separate menu scopes, combined top checks, read-only polling and OS-only installs.
+precedence, separate dashboard and per-machine menu scopes, combined top checks, read-only inventory
+refresh/polling and OS-only installs.
 Ruff and diff checks pass. Browser review uses only local simulated machines; no live Dockhand
 instance or homelab host is contacted.

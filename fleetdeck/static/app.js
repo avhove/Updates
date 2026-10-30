@@ -252,7 +252,7 @@ function dockhandPanel(v) {
   const scheduledState = { success: dh.scheduled_errors ? `Completed with ${dh.scheduled_errors} ${plural(dh.scheduled_errors, "check error", "check errors")}` : "Completed", warning: "Completed with warnings", failed: "Failed", running: "Running", queued: "Queued", skipped: "Skipped", unknown: "Result unavailable" };
   const scheduled = dh.scheduled_check_at ? `Dockhand scheduled check: ${ago(dh.scheduled_check_at)} · ${scheduledState[dh.scheduled_status] || "Result unavailable"}${dh.scheduled_checked != null ? ` · ${dh.scheduled_checked} containers checked` : ""}` : "No scheduled-check history reported by Dockhand.";
   const checkButton = `<button class="small" data-dockhand-check="${id}" ${!state.settings.dockhand_checks_allowed || dh.checking ? "disabled" : ""} title="${state.settings.dockhand_checks_allowed ? "Check image updates in Dockhand; no containers are restarted" : "Enable dockhand.allow_checks in Settings to allow explicit checks"}">${icon("refresh")}${dh.checking ? "Checking…" : "Check in Dockhand"}</button>`;
-  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("boxes")}${esc(v.target.name)}<span class="host-mode muted">Dockhand · ${state.settings.dockhand_checks_allowed ? "manual checks" : "read-only"}</span>${checkButton}${managerLink(v, "Open Dockhand")}</div><p class="muted">Synced ${dh.synced_at ? ago(dh.synced_at) : "never"} · Last requested check: ${dh.last_check_at ? ago(dh.last_check_at) : "never"}.</p><p class="muted">${esc(scheduled)}</p>${dh.history_error ? `<p class="warn" role="status">${esc(dh.history_error)}</p>` : ""}${dh.checking ? '<p role="status" aria-live="polite">Checking image updates in Dockhand… Containers continue running.</p>' : ""}${dh.check_error ? `<p class="bad" role="status">${esc(dh.check_error)}</p>` : dh.last_check_at ? `<p class="${failed ? "bad" : "muted"}" role="status">Check completed${failed ? ` · ${failed} ${plural(failed, "container check failed", "container checks failed")}` : ""}.</p>` : ""}${dh.error ? `<p class="bad">${esc(dh.error)}${dh.synced_at ? " Last-known results follow; status is stale." : ""}</p>` : ""}<div class="docker-check-note muted"><p>Dockhand owns the scheduled checks. Fleetdeck’s automatic dashboard polling reads saved reports without starting new checks. The top Check updates button and Refresh inventory &amp; check Dockhand also request fresh digest checks when enabled; Dockhand’s schedule stays unchanged.</p><p><strong>Synced</strong> is when Fleetdeck fetched the reports. <strong>Last checked</strong> is the confirmed check time for each container. ${retention} Unknown means no result could be reliably matched to this container.</p><p><strong>Check in Dockhand</strong> queries registry digests and metadata. It does not download image layers, change the schedule or restart containers. The … menu also offers Check OS updates and Check container updates separately. Container deployments stay in Dockhand; the per-machine Update button handles OS packages only.</p></div>${items.length ? rows() : '<p class="muted">Container status unavailable.</p>'}</section>`;
+  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("boxes")}${esc(v.target.name)}<span class="host-mode muted">Dockhand · ${state.settings.dockhand_checks_allowed ? "manual checks" : "read-only"}</span>${checkButton}${managerLink(v, "Open Dockhand")}</div><p class="muted">Synced ${dh.synced_at ? ago(dh.synced_at) : "never"} · Last requested check: ${dh.last_check_at ? ago(dh.last_check_at) : "never"}.</p><p class="muted">${esc(scheduled)}</p>${dh.history_error ? `<p class="warn" role="status">${esc(dh.history_error)}</p>` : ""}${dh.checking ? '<p role="status" aria-live="polite">Checking image updates in Dockhand… Containers continue running.</p>' : ""}${dh.check_error ? `<p class="bad" role="status">${esc(dh.check_error)}</p>` : dh.last_check_at ? `<p class="${failed ? "bad" : "muted"}" role="status">Check completed${failed ? ` · ${failed} ${plural(failed, "container check failed", "container checks failed")}` : ""}.</p>` : ""}${dh.error ? `<p class="bad">${esc(dh.error)}${dh.synced_at ? " Last-known results follow; status is stale." : ""}</p>` : ""}<div class="docker-check-note muted"><p>Dockhand owns the scheduled checks. Fleetdeck’s automatic dashboard polling reads saved reports without starting new checks. Check all requests fresh OS and Dockhand digest checks when enabled. Refresh inventory only rediscovers machines and reads saved reports; Dockhand’s schedule stays unchanged.</p><p><strong>Synced</strong> is when Fleetdeck fetched the reports. <strong>Last checked</strong> is the confirmed check time for each container. ${retention} Unknown means no result could be reliably matched to this container.</p><p><strong>Check in Dockhand</strong> queries registry digests and metadata. It does not download image layers, change the schedule or restart containers. The dashboard and per-machine … menus offer Check OS updates and Check container updates separately. Container deployments stay in Dockhand; the per-machine Update button handles OS packages only.</p></div>${items.length ? rows() : '<p class="muted">Container status unavailable.</p>'}</section>`;
 }
 
 function stackPanel(v) {
@@ -413,9 +413,9 @@ function render() {
   $("#check-containers").hidden = !active().some(v => v.dockhand);
   $("#check-containers").disabled = !state.settings.dockhand_checks_allowed || requestingDockhandChecks;
   $("#check-containers").title = state.settings.dockhand_checks_allowed ? "Request fresh Dockhand digest checks only; no OS checks, image downloads or container restarts" : "Enable dockhand.allow_checks in Settings to allow fresh Dockhand checks";
-  $("#refresh span").textContent = state.settings.dockhand_checks_allowed ? "Refresh inventory & check Dockhand" : "Refresh inventory";
+  $("#refresh span").textContent = "Refresh inventory";
   $("#check-all").title = state.settings.dockhand_checks_allowed ? "Check OS updates and request fresh Dockhand digest checks; no containers are restarted" : "Check OS updates";
-  $("#refresh").title = state.settings.dockhand_checks_allowed ? "Refresh machine inventory and request fresh Dockhand digest checks; no image layers are downloaded or containers restarted" : "Read the latest machine inventory and saved Dockhand reports";
+  $("#refresh").title = "Rediscover machines and read saved Dockhand reports; no fresh update checks";
   $("#test-notify").hidden = !state.schedule?.notify_targets;
 
   const hiddenCount = state.targets.length - active().length;
@@ -454,7 +454,7 @@ function render() {
     </div>`;
   }).join("") || (state.filter ? `<div class="empty"><h3>No matching machines</h3><p class="muted">Click the selected KPI again to show all machines.</p></div>` : `<div class="empty"><h3>No machines yet</h3><p class="muted">Add a Proxmox node, an Incus server or any Linux host, and it shows up here with its updates, backups and state.</p><a class="button primary" href="/setup">Add machines</a></div>`));
   const unknown = state.settings.docker_enabled ? active().filter((v) => !v.dockhand && v.target.updatable && v.check?.docker_installed == null && !v.stacks).length : 0;
-  html("#containers", containersVisible() ? `${hosts.some((v) => dockerEnabled(v) && canUpgrade(v.target)) ? `<div class="containers-toolbar"><span class="muted">Fetch downloads images for Fleetdeck-managed hosts only. Dockhand checks compare registry digests and metadata.</span><button class="small" data-fetch-docker>Fetch image updates</button></div>` : ""}${hosts.map(stackPanel).join("") || `<div class="empty"><h3>No Docker hosts discovered</h3><p class="muted">Configure Dockhand mappings or use OS checks for native Docker discovery.</p></div>`}${unknown ? `<p class="muted discovery-note">Docker capability is not known on ${unknown} machine(s). <button class="small" data-discover-docker>Check updates to discover hosts</button></p>` : ""}` : "");
+  html("#containers", containersVisible() ? `${hosts.some((v) => dockerEnabled(v) && canUpgrade(v.target)) ? `<div class="containers-toolbar"><span class="muted">Fetch downloads images for Fleetdeck-managed hosts only. Dockhand checks compare registry digests and metadata.</span><button class="small" data-fetch-docker>Fetch image updates</button></div>` : ""}${hosts.map(stackPanel).join("") || `<div class="empty"><h3>No Docker hosts discovered</h3><p class="muted">Configure Dockhand mappings or use OS checks for native Docker discovery.</p></div>`}${unknown ? `<p class="muted discovery-note">Docker capability is not known on ${unknown} machine(s). <button class="small" data-discover-docker>Check OS updates to discover hosts</button></p>` : ""}` : "");
   $(".view-tabs").hidden = !containersVisible();
   $("#groups").hidden = state.view !== "machines";
   $("#containers").hidden = state.view !== "containers";
@@ -511,7 +511,11 @@ function openMachineMenu(id, trigger) {
   const action = (kind, label, iconName, enabled, reason = "") => `<button data-act="${kind}" data-id="${esc(id)}" ${enabled ? "" : "disabled"} title="${esc(reason)}">${icon(iconName)}${label}</button>`;
   const menu = $("#machine-actions");
   menu.innerHTML = `<div class="muted menu-caption">${esc(t.name)}</div>` +
-    action("check", "Check updates", "refresh", t.updatable && !busy) +
+    action("check", "Check OS updates", "refresh", t.updatable && !busy) +
+    (v.dockhand ? action("dockhand", "Check container updates", "boxes", state.settings.dockhand_checks_allowed && !v.dockhand.checking,
+      !state.settings.dockhand_checks_allowed ? "Enable dockhand.allow_checks in Settings to allow fresh checks" : v.dockhand.checking ? "A Dockhand check is already running" : "Request a fresh Dockhand digest check for this machine; no downloads or restarts")
+      : hasDocker(v) && dockerEnabled(v) ? action("stacks", "Check container updates", "boxes", t.updatable && !busy,
+        "Fleetdeck native checks pull Compose images; confirmation is required") : "") +
     (nextAction(v).includes('data-act="reboot"') ? "" : action("reboot", "Reboot", "reboot", canReboot(t) && !busy && !v.blocked, t.no_reboot || v.blocked || t.note)) +
     (t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
     (hasDocker(v) && !v.dockhand ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
@@ -686,8 +690,8 @@ async function refreshInventory() {
   if (button.disabled) return;
   button.disabled = true;
   try {
-    // GET stays read-only. Only deliberate manual controls submit check POSTs.
-    if (await load(true)) await requestDockhandChecks();
+    // Inventory refresh only discovers machines and syncs saved reports.
+    await load(true);
   } finally {
     button.disabled = false;
   }
@@ -913,6 +917,8 @@ document.addEventListener("click", (e) => {
     act("stack-update", [id], { stack: name, prune: !!remember.get("pruneImages") });
   } else if (el.dataset.act === "docker") {
     setView("containers", el.dataset.id);
+  } else if (el.dataset.act === "dockhand") {
+    confirmAction("dockhand", [el.dataset.id]);
   } else if (el.dataset.act === "stacks") {
     confirmAction("stacks", [el.dataset.id]);
   } else if (el.dataset.hide) {
