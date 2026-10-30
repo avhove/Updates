@@ -460,10 +460,10 @@ button.login-submit.busy .login-spinner { display: inline-block; }
 .dashboard-page .container-metric-hit:hover { background: transparent; border: 0; }
 .dashboard-page .update-metric.container { background: color-mix(in srgb, var(--container-tone) 11%, var(--panel)); color: var(--container-tone); }
 .dashboard-page .update-metric.container.unknown { background: var(--chip); color: var(--muted); }
-.container-manager-symbol { display: inline-flex; position: absolute; left: calc(50% + 25px); top: 50%; transform: translateY(-50%); color: var(--muted); }
+.container-manager-symbol { display: inline-flex; position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); color: var(--muted); }
 .container-manager-symbol .ui-icon { width: 13px; height: 13px; }
-.containers-cell { text-align: center; border-left: 1px solid var(--border-strong); }
-.dashboard-page .machine-table .container-heading { text-align: center; border-left: 1px solid var(--border-strong); }
+.containers-cell { text-align: center; }
+.dashboard-page .machine-table .container-heading { text-align: center; }
 .scope-headings th { text-align: center; font-weight: 500; padding: 7px; background: var(--panel-2); }
 .container-detail > td { padding: 12px 16px; background: var(--panel-2); white-space: normal; }
 .container-detail .docker-host { margin: 0; }
@@ -546,40 +546,43 @@ a.brand { color: var(--text); text-decoration: none; }
 #docker-settings-dialog input, #docker-settings-dialog select { width: 100%; }
 .discovery-note { font-size: 12px; }
 .dashboard-page .group-head { padding: 11px 16px; }
-.dashboard-page .machine-table { min-width: 980px; table-layout: fixed; }
-.dashboard-page .machine-table.has-backup { min-width: 1100px; }
-.dashboard-page .machine-table.has-containers { min-width: 1080px; }
-.dashboard-page .machine-table.has-backup.has-containers { min-width: 1100px; }
+/* Width budget: icon + four-digit count + padding; longest standard status
+   (Updates available / updating Docker…), Reboot action, and relative check age.
+   Names receive all remaining width. Pathological names/counts retain full labels. */
+.dashboard-page .machine-table { min-width: 1072px; table-layout: fixed; }
+.dashboard-page .machine-table.has-backup { min-width: 1200px; }
+.dashboard-page .machine-table.has-containers { min-width: 1196px; }
+.dashboard-page .machine-table.has-backup.has-containers { min-width: 1324px; }
 .dashboard-page .machine-table col.col-select { width: 30px; }
 .dashboard-page .machine-table col.col-machine { width: auto; }
-/* With a spanning scope header, fixed-table layout cannot infer the one auto column
-   reliably. Give it an explicit share so names never collapse into the backup column. */
-.dashboard-page .machine-table.has-containers col.col-machine { width: 240px; }
-.dashboard-page .machine-table.has-backup.has-containers col.col-machine { width: 160px; }
-.dashboard-page .machine-table col.col-backup { width: 90px; }
-.dashboard-page .machine-table col.col-backup-job { width: 34px; }
-.dashboard-page .machine-table col.col-metric { width: 62px; }
-.dashboard-page .machine-table col.col-status { width: 150px; }
-.dashboard-page .machine-table col.col-update { width: 94px; }
-.dashboard-page .machine-table col.col-reboot { width: 48px; }
-.dashboard-page .machine-table col.col-checked { width: 80px; }
-.dashboard-page .machine-table col.col-info { width: 36px; }
-.dashboard-page .machine-table col.col-more { width: 36px; }
-.dashboard-page .machine-table col.col-containers { width: 96px; }
-.dashboard-page .machine-table > thead > tr > th { white-space: nowrap; padding-inline: 5px; letter-spacing: 0; }
-.dashboard-page .machine-table > tbody > .machine-row > td { padding-inline: 5px; }
-.dashboard-page .machine-table > tbody > .machine-row > td { height: 56px; padding-top: 8px; padding-bottom: 8px; white-space: nowrap; }
+.dashboard-page .machine-table col.col-backup { width: 88px; }
+.dashboard-page .machine-table col.col-backup-job { width: 40px; }
+.dashboard-page .machine-table col.col-metric { width: 78px; }
+.dashboard-page .machine-table col.col-status { width: 158px; }
+.dashboard-page .machine-table col.col-update { width: 96px; }
+.dashboard-page .machine-table col.col-reboot { width: 62px; }
+.dashboard-page .machine-table col.col-checked { width: 88px; }
+.dashboard-page .machine-table col.col-info { width: 60px; }
+.dashboard-page .machine-table col.col-more { width: 44px; }
+.dashboard-page .machine-table col.col-containers { width: 124px; }
+.dashboard-page .machine-table > thead > tr > th { white-space: nowrap; padding-inline: 6px; letter-spacing: 0; vertical-align: middle; }
+.dashboard-page .machine-table > tbody > .machine-row > td { height: 62px; padding: 8px 6px; white-space: nowrap; }
 .dashboard-page .machine-table > tbody > .machine-row > td:first-child { padding-left: 14px; padding-right: 5px; }
+.dashboard-page .machine-table .section-start { border-left: 1px solid var(--border-strong); }
+.dashboard-page .machine-table > thead .scope-headings > th[rowspan] { text-align: left; }
+.dashboard-page .machine-table > thead .scope-headings > th.container-heading,
+.dashboard-page .machine-table > thead .scope-headings > th.info-heading,
+.dashboard-page .machine-table > thead .scope-headings > th.more-heading { text-align: center; }
 .dashboard-page .machine-table .machine-cell { overflow: visible; font-weight: 600; }
 .dashboard-page .machine-table tr.guest td.machine-cell { padding-left: 12px; }
 .dashboard-page .machine-main { position: relative; z-index: 2; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
 .dashboard-page .machine-meta { display: contents; }
-.dashboard-page .machine-table .machine-main { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 3px 8px; width: 100%; }
+.dashboard-page .machine-table .machine-main { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 3px 8px; width: 100%; }
 .dashboard-page .machine-table .machine-main > .state { grid-column: 1; grid-row: 1 / 3; align-self: center; }
-.dashboard-page .machine-table .machine-name { grid-column: 2; grid-row: 1; white-space: normal; overflow-wrap: anywhere; }
-.dashboard-page .machine-table .monitor-policy { grid-column: 3; grid-row: 1; }
-.dashboard-page .machine-table .machine-meta { grid-column: 2 / -1; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
-.dashboard-page .machine-table .machine-os { flex: 1 1 70px; }
+.dashboard-page .machine-table .machine-identity { grid-column: 2; grid-row: 1; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.dashboard-page .machine-table .machine-name { flex: 0 1 auto; white-space: nowrap; }
+.dashboard-page .machine-table .machine-meta { grid-column: 2; grid-row: 2; display: block; min-width: 0; }
+.dashboard-page .machine-table .machine-os { display: block; white-space: nowrap; }
 .dashboard-page .mobile-select-label { display: none; }
 .dashboard-page .machine-select { display: inline-flex; align-items: center; gap: 8px; }
 .dashboard-page .machine-main .state { display: inline-flex; align-items: center; }
@@ -593,7 +596,7 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .type-chip { color: var(--text-2); font-weight: 600; }
 .dashboard-page .os-cell { overflow: hidden; text-overflow: ellipsis; }
 .dashboard-page .backup-missing, .dashboard-page .backup-job { display: inline-flex; align-items: center; }
-.dashboard-page .backup-job { width: 34px; min-height: 28px; justify-content: center; }
+.dashboard-page .backup-job { width: 28px; min-height: 28px; justify-content: center; }
 .dashboard-page .backup-job-heading, .dashboard-page .backup-job-cell { padding-inline: 5px; text-align: center; }
 .dashboard-page .backup-cell .ui-icon, .dashboard-page .backup-job-cell .ui-icon { width: 15px; height: 15px; }
 .dashboard-page th.update-heading, .dashboard-page td.update-metric-cell { padding-inline: 5px; text-align: center; }
@@ -612,7 +615,9 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .update-metric.phased { color: var(--ok); }
 .dashboard-page .update-metric.stale { opacity: .54; }
 .dashboard-page .last-known-note { margin: 10px 12px; color: var(--muted); font-size: 12px; }
-.dashboard-page .update-metric .ui-icon { width: 14px; height: 14px; }
+.dashboard-page .update-metric .ui-icon { width: 14px; height: 14px; flex: none; }
+.dashboard-page .machine-table .update-metric { max-width: 100%; }
+.dashboard-page .machine-table .update-metric > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .dashboard-page .update-summary { color: var(--text-2); }
 .dashboard-page .status-inline { display: inline-flex; align-items: center; gap: 6px; font-weight: 550; }
 .dashboard-page .status-inline.updates-available { color: var(--accent); font-weight: 400; }
@@ -635,7 +640,8 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .reboot-status.required { width: 28px; height: 28px; justify-content: center; border-radius: 6px; color: var(--reboot); background: color-mix(in srgb, var(--reboot) 11%, var(--panel)); }
 .dashboard-page button.reboot-action { padding-inline: 8px; border-color: color-mix(in srgb, var(--reboot) 45%, var(--border)); background: color-mix(in srgb, var(--reboot) 10%, var(--panel)); color: var(--reboot); box-shadow: none; font-weight: 650; }
 .dashboard-page button.reboot-action:hover:not(:disabled) { border-color: var(--reboot); background: color-mix(in srgb, var(--reboot) 16%, var(--panel)); }
-.dashboard-page .last-check { color: var(--muted); }
+.dashboard-page .last-check { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.dashboard-page .machine-table .backup-cell > span { display: block; overflow: hidden; text-overflow: ellipsis; }
 .dashboard-page .info-heading, .dashboard-page .info-cell { padding-inline: 4px; text-align: center; }
 .dashboard-page .info-cell-content { display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
 .dashboard-page .info-cell .repo-note { margin-left: 0; }

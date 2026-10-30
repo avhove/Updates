@@ -81,12 +81,33 @@ redirect refusal, cached reconciliation, confirmation/cancellation and simulated
 No live Dockhand environment was contacted. Checking state is tested offline; rendered browser
 appearance still needs visual review.
 
-The compact-layout revision places type and OS below machine names, reduces column padding
+The first compact-layout revision placed type and OS below machine names, reduced column padding
 and widths, and switches to machine cards below 1200 px. Browser review with simulated machines
 confirmed that machine and expanded container tables fit at 1200 and 1440 px, with cards at
 1199 and 390 px. The refresh revision passed 53 focused backend tests (one skip and one
 platform-specific deselection), all 30 offline UI tests, and Ruff checks. No homelab connection
 or live deployment was used for this verification.
+
+The revised column layout keeps type, monitor policy and existing badges beside the machine
+name; the second line contains only the OS. The machine column takes all remaining width
+(about 366 px at a 1440 px viewport with both backups and containers). Other columns have
+content budgets: 78 px for an icon and four-digit count, 158 px for the longest standard status
+(`updating Docker…`), 96 px for an 84 px action button and padding, 62 px for Reboot,
+88 px for relative backup/check ages such as `59 min ago`, 40 px for the backup job icon,
+124 px for the container count and manager symbol, 60 px for Info plus a repository warning,
+and 44 px for More. Counts and week ages are not bounded; unusually large values truncate
+within their cell with the full value available through a tooltip or accessible control label.
+Long machine names also retain their full hover text. Cards start below 1380 px so names
+are not squeezed to preserve the desktop table.
+
+Backups groups Latest and Job; Operating system groups Security, Packages, Phased, Reboot,
+Status, Action and Checked. Machine, Containers, Info and More span both header rows.
+Dividers consistently separate identity, backups, OS, containers and utility controls.
+Without backups or containers, a single header row is sufficient. Column groups and header
+scopes match these boundaries, and all host groups retain identical columns. All 31 offline
+UI tests pass, including the four combinations of optional groups and merged headers.
+Browser checks used only simulated machines at 1380/1440 px and cards at 390 px, including
+long names, a 9999 count, `59 min ago`, failed checks and a busy Docker status.
 
 The pending endpoint is not a complete successful-check history. A missing pending record,
 an unsupported older API response or an empty environment inventory must not become **Up to date**.

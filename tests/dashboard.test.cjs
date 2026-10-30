@@ -53,7 +53,7 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
       return { ok: true, json: async () => body };
     },
     location: { hostname: "localhost", protocol: "http:", pathname: "/" },
-    matchMedia: (query) => query === "(max-width: 1199px)" ? mobileQuery : { matches: false }, addEventListener: window.addEventListener.bind(window),
+    matchMedia: (query) => query === "(max-width: 1379px)" ? mobileQuery : { matches: false }, addEventListener: window.addEventListener.bind(window),
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(read("format.js"), context);
@@ -230,7 +230,7 @@ test("update columns separate security, packages and phased updates with only re
   });
   const doc = ui.document;
   const headers = [...doc.querySelectorAll(".machine-table > thead .column-headings th")].map((el) => el.textContent.trim());
-  assert.deepEqual(headers, ["", "Machine", "Security", "Package", "Phased", "Reboot", "Status", "Actions", "Checked", "Info", "More"]);
+  assert.deepEqual(headers, ["", "Machine", "Security", "Packages", "Phased", "Reboot", "Status", "Action", "Checked", "Info", "More"]);
   assert.equal(doc.querySelectorAll(".machine-table > thead > tr").length, 1);
   assert.equal(doc.querySelectorAll(".machine-table > colgroup > col").length, 11);
   assert.equal(doc.querySelector(".more-heading").textContent, "More");
@@ -336,9 +336,15 @@ test("last-known results stay visible without stale update or reboot actions", a
   assert.ok(scheduled.querySelector(".machine-os"));
   for (const table of doc.querySelectorAll(".machine-table")) {
     const columns = table.querySelectorAll("colgroup col").length;
-    for (const row of table.querySelectorAll(":scope > thead > tr, :scope > tbody > tr")) {
+    let carried = 0;
+    for (const row of table.querySelectorAll(":scope > thead > tr")) {
       const span = [...row.children].reduce((n, cell) => n + Number(cell.getAttribute("colspan") || 1), 0);
-      assert.equal(span, columns, "header, rows and detail panels span the same columns");
+      assert.equal(span + carried, columns, "merged headers span the same columns as the body");
+      carried = [...row.children].filter(cell => cell.getAttribute("rowspan") === "2").length;
+    }
+    for (const row of table.querySelectorAll(":scope > tbody > tr")) {
+      const span = [...row.children].reduce((n, cell) => n + Number(cell.getAttribute("colspan") || 1), 0);
+      assert.equal(span, columns, "rows and detail panels span the same columns");
     }
   }
   assert.deepEqual(ui.errors, []);
@@ -509,7 +515,7 @@ test("machine backup context uses neutral information popovers", async () => {
   assert.equal(standalone.querySelector(".backup-job-cell").textContent.trim(), "");
   assert.equal(guest.closest("table").querySelector(".backup-job-heading").textContent, "Job");
   const css = read("style.css");
-  assert.match(css, /\.backup-job \{ width: 34px; min-height: 28px; justify-content: center; \}/);
+  assert.match(css, /\.backup-job \{ width: 28px; min-height: 28px; justify-content: center; \}/);
   assert.match(css, /\.backup-job-heading, \.dashboard-page \.backup-job-cell \{ padding-inline: 5px; text-align: center; \}/);
   assert.ok(standalone.querySelector(".info-cell .repo-note"));
   assert.equal(node.querySelector(".repo-note"), null);
@@ -753,5 +759,41 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
     ui.click('[data-machine-menu="appliance"]');
     assert.equal(ui.document.querySelector('[data-monitor]'), null);
     assert.equal(ui.calls.some(c => c.path === '/api/monitor-only'), false);
+  }
+});
+
+test("machine headers merge standalone captions and keep OS check time inside the OS group", async () => {
+  for (const backup of [false, true]) for (const containers of [false, true]) {
+    const ui = await dashboard({ containers, targets: [machine('containers-production-primary', {
+      target: backup ? { backup: { last: now, in_job: true } } : {},
+      check: { os: 'Ubuntu 24.04.1 LTS', community_script: 'demo-app' },
+      view: { runs_dashboard: true },
+    })] });
+    const table = ui.document.querySelector('.machine-table');
+    const row = table.querySelector('.machine-row');
+    assert.equal(row.querySelector('.machine-identity .machine-name').textContent, 'containers-production-primary');
+    assert.ok(row.querySelector('.machine-identity .type-chip'));
+    assert.match(row.querySelector('.machine-identity').textContent, /dashboard.*helper script/);
+    assert.equal(row.querySelector('.machine-meta').textContent, 'Ubuntu 24.04.1');
+    assert.equal(row.querySelector('.machine-meta').children.length, 1);
+    assert.equal(row.querySelector('.last-check').previousElementSibling.className, 'update-action-cell');
+    assert.equal(row.querySelector('.last-check').getAttribute('data-label'), 'OS checked');
+    const grouped = backup || containers;
+    assert.equal(table.querySelectorAll('thead tr').length, grouped ? 2 : 1);
+    const headers = [...table.querySelectorAll('thead th')];
+    const machineHeader = headers.find(h => h.textContent === 'Machine');
+    assert.equal(machineHeader.getAttribute('rowspan'), grouped ? '2' : null);
+    if (grouped) {
+      assert.equal(headers.find(h => h.textContent === 'Operating system').getAttribute('colspan'), '7');
+      assert.equal(headers.find(h => h.textContent === 'Info').getAttribute('rowspan'), '2');
+    }
+    if (containers) {
+      const header = headers.find(h => h.textContent === 'Containers');
+      assert.equal(header.getAttribute('rowspan'), '2');
+      assert.equal(row.querySelector('.containers-cell').previousElementSibling.className, 'last-check');
+      assert.ok(row.querySelector('.containers-cell').classList.contains('section-start'));
+    }
+    assert.ok(row.querySelector('[data-label="Security"]').classList.contains('section-start'));
+    assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
   }
 });

@@ -1,7 +1,7 @@
 "use strict";
 
 const state = { targets: [], errors: {}, settings: {}, backupPlaces: {}, jobs: [], schedule: null, selected: new Set(), expanded: new Set(), containerExpanded: new Set(), logJob: null, logLines: [], showHidden: false, view: "machines", filter: null };
-const mobileDashboard = matchMedia("(max-width: 1199px)");
+const mobileDashboard = matchMedia("(max-width: 1379px)");
 const $ = (sel) => document.querySelector(sel);
 const renderedHTML = new WeakMap();
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -133,7 +133,7 @@ function metricButton(v, kind, count) {
   const id = esc(v.target.id), open = state.expanded.has(v.target.id);
   const label = { security: "security", package: "package", phased: "phased" }[kind];
   const iconName = { security: "shield", package: "package", phased: "clock" }[kind];
-  const metric = count ? `<span class="update-metric ${kind}${staleCheck(v) ? " stale" : ""}">${icon(iconName)}<span>${count}</span></span>` : "";
+  const metric = count ? `<span class="update-metric ${kind}${staleCheck(v) ? " stale" : ""}" title="${count} ${label} update${count === 1 ? "" : "s"}">${icon(iconName)}<span>${count}</span></span>` : "";
   const caption = count ? `${count} ${label} update${count === 1 ? "" : "s"}${staleCheck(v) ? " from the last successful check" : ""}; ` : "";
   return `<button class="update-list-hit" data-toggle="${id}" data-focus-key="updates:${id}:${kind}" aria-expanded="${open}" aria-controls="packages-${id}" aria-label="${caption}${open ? "Hide" : "Show"} package list for ${esc(v.target.name)}">${metric}</button>`;
 }
@@ -143,7 +143,7 @@ function updateColumns(v) {
   const security = securityPackages(c).length;
   const regular = regularPackages(c).length;
   const phased = phasedPackages(c).length;
-  return `<td class="update-metric-cell" data-label="Security">${metricButton(v, "security", security)}</td><td class="update-metric-cell" data-label="Package">${metricButton(v, "package", regular)}</td><td class="update-metric-cell" data-label="Phased">${metricButton(v, "phased", phased)}</td>`;
+  return `<td class="update-metric-cell section-start" data-label="Security">${metricButton(v, "security", security)}</td><td class="update-metric-cell" data-label="Package">${metricButton(v, "package", regular)}</td><td class="update-metric-cell" data-label="Phased">${metricButton(v, "phased", phased)}</td>`;
 }
 
 function updateState(v) {
@@ -183,7 +183,7 @@ function backupCell(t) {
   const b = t.backup;
   if (!b) return isProxmoxNode(t) ? "" : `<span class="backup-missing muted" aria-label="Backup information unavailable">—</span>`;
   if (b.last) {
-    return `<span class="${b.stale ? "warn" : ""}">${ago(b.last)}</span>`;
+    return `<span class="${b.stale ? "warn" : ""}" title="${esc(window.FleetdeckDates.dateTime(b.last))}">${ago(b.last)}</span>`;
   }
   if (isProxmoxNode(t)) {
     // Proxmox node configuration-backup context is available from the neutral information popover.
@@ -285,6 +285,17 @@ function stackPanel(v) {
     ${body}${dockerEnabled(v) ? '<p class="docker-check-note muted">Coverage: Docker Compose stacks only. Standalone containers are outside Fleetdeck checks.</p>' : ""}</div>`;
 }
 
+// Single-purpose columns span both header rows; only real groups get subheadings.
+function machineTableHead(withBackup) {
+  const containers = containersVisible(), grouped = withBackup || containers;
+  const span = grouped ? ' rowspan="2"' : "";
+  const machine = `<th${span} scope="col" aria-label="Selection"></th><th${span} scope="col">Machine</th>`;
+  const utilities = `${containers ? `<th${span} scope="col" class="container-heading section-start" title="Container image updates; managed separately from OS packages">Containers</th>` : ""}<th${span} scope="col" class="info-heading section-start">Info</th><th${span} scope="col" class="more-heading">More</th>`;
+  const os = '<th class="update-heading section-start" scope="col">Security</th><th class="update-heading" scope="col">Packages</th><th class="update-heading" scope="col">Phased</th><th class="reboot-heading" scope="col">Reboot</th><th scope="col">Status</th><th scope="col">Action</th><th scope="col" title="Latest OS update check">Checked</th>';
+  if (!grouped) return `<thead><tr class="column-headings">${machine}${os}${utilities}</tr></thead>`;
+  return `<thead><tr class="scope-headings">${machine}${withBackup ? '<th colspan="2" scope="colgroup" class="section-start">Backups</th>' : ""}<th colspan="7" scope="colgroup" class="section-start">Operating system</th>${utilities}</tr><tr class="column-headings">${withBackup ? '<th scope="col" class="section-start" title="Last backup">Latest</th><th scope="col" class="backup-job-heading" title="Covered by a backup job">Job</th>' : ""}${os}</tr></thead>`;
+}
+
 function rowHtml(v, withBackup, relation = {}, mobile = false) {
   const t = v.target, c = v.check;
   const shown = displayCheck(v);
@@ -310,15 +321,15 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
   if (state.selected.has(t.id)) rowClasses.push("is-selected");
   let html = `<tr class="${rowClasses.join(" ")}" data-machine-row="${esc(t.id)}">
     <td class="selection-cell"><label class="machine-select"><input type="checkbox" aria-label="Select ${esc(t.name)}" data-select="${esc(t.id)}" data-focus-key="select:${esc(t.id)}" ${state.selected.has(t.id) ? "checked" : ""} ${selectable(v) && !relation.context ? "" : "disabled"}><span class="mobile-select-label">Select</span></label></td>
-    <td class="name machine-cell" data-label="Machine"><span class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-name" title="${esc(t.name)}">${esc(t.name)}</span>${monitor}<span class="machine-meta"><span class="chip type-chip">${esc(kindLabel(t))}</span>${c?.os ? `<span class="machine-os" title="${esc(c.os)}">${esc(compactOS(c.os))}</span>` : ""}${self}${cs}${note}</span></span></td>
-    ${withBackup ? `<td class="backup-cell" data-label="Last backup">${backupCell(t)}</td><td class="backup-job-cell" data-label="Job">${backupJobCell(t)}</td>` : ""}
+    <td class="name machine-cell" data-label="Machine"><span class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-identity"><span class="machine-name" title="${esc(t.name)}">${esc(t.name)}</span>${monitor}<span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}</span><span class="machine-meta">${shown?.os ? `<span class="machine-os" title="${esc(shown.os)}">${esc(compactOS(shown.os))}</span>` : ""}</span></span></td>
+    ${withBackup ? `<td class="backup-cell section-start" data-label="Last backup">${backupCell(t)}</td><td class="backup-job-cell" data-label="Job">${backupJobCell(t)}</td>` : ""}
     ${updateColumns(v)}
     <td class="reboot-cell" data-label="Reboot">${reboot}</td>
     <td class="update-status-cell" data-label="Status">${updateState(v)}</td>
     <td class="update-action-cell" data-label="Actions">${relation.context ? "" : nextAction(v)}</td>
-    ${containersVisible() ? `<td class="containers-cell" data-label="Containers">${dockerCell(v)}</td>` : ""}
-    <td class="last-check" data-label="Checked">${c ? ago(c.checked_at) : "Never"}</td>
-    <td class="info-cell" data-label="Info">${information ? `<span class="info-cell-content">${information}</span>` : ""}</td>
+    <td class="last-check" data-label="OS checked" title="${c ? esc(window.FleetdeckDates.dateTime(c.checked_at)) : "Never checked"}">${c ? ago(c.checked_at) : "Never"}</td>
+    ${containersVisible() ? `<td class="containers-cell section-start" data-label="Containers">${dockerCell(v)}</td>` : ""}
+    <td class="info-cell section-start" data-label="Info">${information ? `<span class="info-cell-content">${information}</span>` : ""}</td>
     <td class="more-cell"><button class="small ghost more-actions" data-machine-menu="${esc(t.id)}" data-focus-key="menu:${esc(t.id)}" aria-label="More actions for ${esc(t.name)}" aria-controls="machine-actions" aria-expanded="false">⋯</button></td>
   </tr>`;
   if (mobile) {
@@ -424,8 +435,8 @@ function render() {
     <div class="group">
       <div class="group-head"><span class="chip">${PLATFORM[g.platform] || g.platform}</span> ${esc(g.title)}</div>
       <div class="group-scroll"><table class="machine-table${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
-        <colgroup><col class="col-select"><col class="col-machine">${withBackup ? '<col class="col-backup"><col class="col-backup-job">' : ""}<col class="col-metric"><col class="col-metric"><col class="col-metric"><col class="col-reboot"><col class="col-status"><col class="col-update">${containersVisible() ? '<col class="col-containers">' : ""}<col class="col-checked"><col class="col-info"><col class="col-more"></colgroup>
-        <thead>${containersVisible() ? `<tr class="scope-headings"><th colspan="${2 + (2 * Number(!!withBackup))}"></th><th colspan="6" scope="colgroup">Operating system</th><th class="container-heading" scope="colgroup">Containers</th><th colspan="3"></th></tr>` : ""}<tr class="column-headings"><th></th><th>Machine</th>${withBackup ? '<th>Last backup</th><th class="backup-job-heading">Job</th>' : ""}<th class="update-heading">Security</th><th class="update-heading">Package</th><th class="update-heading">Phased</th><th class="reboot-heading">Reboot</th><th>Status</th><th>${containersVisible() ? "OS action" : "Actions"}</th>${containersVisible() ? '<th class="container-heading">Updates</th>' : ""}<th>Checked</th><th class="info-heading">Info</th><th class="more-heading">More</th></tr></thead>
+        <colgroup><col class="col-select"><col class="col-machine"></colgroup>${withBackup ? '<colgroup><col class="col-backup"><col class="col-backup-job"></colgroup>' : ""}<colgroup><col class="col-metric"><col class="col-metric"><col class="col-metric"><col class="col-reboot"><col class="col-status"><col class="col-update"><col class="col-checked"></colgroup>${containersVisible() ? '<colgroup><col class="col-containers"></colgroup>' : ""}<colgroup><col class="col-info"><col class="col-more"></colgroup>
+        ${machineTableHead(withBackup)}
         <tbody>${rows}</tbody>
       </table></div>
     </div>`;
