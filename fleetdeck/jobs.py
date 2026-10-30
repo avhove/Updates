@@ -186,6 +186,14 @@ class JobManager:
             for j in self.jobs.values()
         ):
             raise ValueError("Wait for this machine's Docker jobs to finish before changing its settings")
+        self.stage_docker_settings(target_id, settings)
+
+    def stage_docker_settings(self, target_id: str, settings: DockerSettings) -> None:
+        """Persist a policy alongside a staged provider-config change. Live Dockhand mappings
+        continue to override it until Apply restarts the app; native jobs cannot bypass them."""
+        self.inventory.get(target_id)
+        if self.active_job(target_id):
+            raise ValueError("Wait for this machine's jobs to finish before changing its settings")
         # Unlike check history, a policy must be saved successfully before the UI reports success.
         if self.store is not None:
             self.store.save_docker_settings(target_id, settings)

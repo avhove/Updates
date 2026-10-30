@@ -285,6 +285,7 @@ def create_app(
                 "community_scripts_update": cfg.community_scripts_update,
                 "containers_visible": True,
                 "dockhand_checks_allowed": bool(cfg.dockhand and cfg.dockhand.allow_checks),
+                "dockhand_poll_seconds": cfg.dockhand.poll_seconds if cfg.dockhand else None,
                 "dockhand_results_persistent": store is not None,
                 "scheduled_container_checks": cfg.schedule.check_docker,
             },
@@ -520,7 +521,10 @@ def create_app(
             raise HTTPException(400, str(e)) from None
 
     def busy() -> list[str]:
-        return sorted({j.target_name for j in jobs.jobs.values() if j.status in ("queued", "running")})
+        names = {j.target_name for j in jobs.jobs.values() if j.status in ("queued", "running")}
+        if dockhand is not None and any(not task.done() for task in dockhand.tasks.values()):
+            names.add("Dockhand container checks")
+        return sorted(names)
 
     restart = _when_idle(restart, busy) if restart is not None else None
     if cfg.console.enabled:

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fleetdeck</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css?v=46">
+  <link rel="stylesheet" href="/static/style.css?v=47">
   <script src="/static/theme.js?v=11"></script>
 </head>
 <body class="dashboard-page">
@@ -110,21 +110,37 @@
   <dialog id="docker-settings-dialog" aria-labelledby="docker-settings-title">
     <form id="docker-settings-form">
       <h3 id="docker-settings-title">Docker management</h3>
+      <div class="docker-settings-content">
       <label class="dlg-field">Management mode
         <select id="docker-mode">
           <option value="managed">Managed by Fleetdeck</option>
           <option value="monitor">Monitor only (no stack deployments)</option>
-          <option value="external">Managed externally</option>
+          <option value="dockhand">Managed by Dockhand</option>
+          <option value="external">Other external manager (link only)</option>
           <option value="disabled">Disabled</option>
         </select>
       </label>
-      <p class="muted">OS updates are independent. Image checks currently download newer images; they never restart containers. Disabled and externally managed hosts are excluded from Docker checks.</p>
+      <p class="muted">Fleetdeck checks download Compose images. Dockhand checks registry metadata. Choosing a provider does not start a check or install updates.</p>
       <div id="docker-external-fields" hidden>
         <label class="dlg-field">Manager name <input id="docker-manager-name" maxlength="80" placeholder="Dockhand"></label>
         <label class="dlg-field">Manager URL (optional) <input id="docker-manager-url" type="url" maxlength="2048" placeholder="https://dockhand.example"></label>
       </div>
+      <div id="dockhand-connection-fields" hidden>
+        <p id="dockhand-shared-note" class="muted"></p>
+        <label class="dlg-field">Dockhand URL <input id="dockhand-url" type="url" maxlength="2048" placeholder="https://dockhand.example" autocomplete="off"></label>
+        <label class="dlg-field">API token <input id="dockhand-token" type="password" maxlength="4096" autocomplete="new-password" placeholder="Enter a token"></label>
+        <p id="dockhand-token-note" class="muted">Saved on the server; never displayed here.</p>
+        <div class="docker-settings-grid">
+          <label class="dlg-field">Read saved reports every (seconds) <input id="dockhand-poll" type="number" min="60" max="86400" value="300"></label>
+          <label class="dlg-field">Dockhand environment ID <input id="dockhand-environment" type="number" min="1" step="1" placeholder="1"></label>
+        </div>
+        <label class="container-prune"><input id="dockhand-allow-checks" type="checkbox"> Allow Fleetdeck to request fresh checks</label>
+        <p class="muted">This environment is linked to the selected machine automatically. Scheduled checks also require <code>schedule.check_docker: true</code>. Saving does not change Dockhand’s own schedule.</p>
+      </div>
+      <p id="docker-settings-status" class="muted" role="status"></p>
       <p id="docker-settings-error" class="bad" role="alert"></p>
-      <menu><button type="button" id="docker-settings-close">Cancel</button><button type="submit" id="docker-settings-save" class="primary">Save</button></menu>
+      </div>
+      <menu><button type="button" id="docker-settings-close">Close</button><button type="submit" id="docker-settings-save" class="primary">Save</button><button type="button" id="docker-settings-apply" hidden>Apply saved changes</button></menu>
     </form>
   </dialog>
 
@@ -205,8 +221,8 @@
 
   <script src="/static/format.js?v=1"></script>
   <script src="/static/tools.js?v=1"></script>
-  <script src="/static/containers.js?v=6"></script>
-  <script src="/static/app.js?v=45"></script>
+  <script src="/static/containers.js?v=7"></script>
+  <script src="/static/app.js?v=46"></script>
   <script src="/static/console.js?v=2"></script>
 </body>
 </html>

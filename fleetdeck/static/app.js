@@ -8,7 +8,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const PLATFORM = { proxmox: "Proxmox", incus: "Incus", ssh: "Standalone", demo: "Demo" };
 const KIND = { host: "Host", lxc: "LXC", vm: "VM", container: "Container" };
 const ICON = {
-  boxes: '<path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7 12 12l8.7-5"/><path d="M12 22V12"/>',
+  // Lucide container icon (ISC); see lucide-LICENSE.txt.
+  container: '<path d="M22 7.7c0-.6-.4-1.2-.8-1.5l-6.3-3.9a1.72 1.72 0 0 0-1.7 0l-10.3 6c-.5.2-.9.8-.9 1.4v6.6c0 .5.4 1.2.8 1.5l6.3 3.9a1.72 1.72 0 0 0 1.7 0l10.3-6c.5-.3.9-1 .9-1.5Z"/><path d="M10 21.9V14L2.1 9.1"/><path d="m10 14 11.9-6.9"/><path d="M14 19.8v-8.1"/><path d="M18 17.5V9.4"/>',
   external: '<path d="M15 3h6v6M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
   monitor: '<rect x="3" y="3" width="18" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>',
   server: '<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01"/>',
@@ -206,7 +207,7 @@ function machineInfoButton(t, c) {
 function updatesLegend() {
   const item = (symbol, label, tone = "", tip = "") => `<span class="updates-legend-item"${tip ? ` title="${esc(tip)}"` : ""}><span class="${tone}">${icon(symbol)}</span>${label}</span>`;
   const os = state.view !== "containers" ? `<div class="updates-legend-group"><strong>OS</strong>${item("shield", "Security", "bad")}${item("package", "Packages")}${item("clock", "Phased", "ok", "Waiting for phased rollout; no action needed yet")}${item("reboot", "Reboot required", "reboot-tone")}</div>` : "";
-  const containers = containersVisible() && state.view !== "machines" ? `<div class="updates-legend-group"><strong>Containers</strong>${item("boxes", "Image updates", "container-tone")}${item("tag", "Review", "container-review-tone", "New version tags, pinned digests or held updates")}${item("coverage", "Coverage gaps", "muted", "Local, excluded or unmatched containers; native checks cover Compose only")}${item("alert", "Failed checks", "bad")}</div>` : "";
+  const containers = containersVisible() && state.view !== "machines" ? `<div class="updates-legend-group"><strong>Containers</strong>${item("container", "Image updates", "container-tone")}${item("tag", "Review", "container-review-tone", "New version tags, pinned digests or held updates")}${item("coverage", "Coverage gaps", "muted", "Local, excluded or unmatched containers; native checks cover Compose only")}${item("alert", "Failed checks", "bad")}</div>` : "";
   return os + containers;
 }
 
@@ -227,7 +228,7 @@ function managerLink(v, label) {
   if (v.dockhand?.simulated) return '<span class="chip">Simulated Dockhand</span>';
   const url = dockerSettings(v).manager_url;
   // Treat stored values as untrusted too; never turn a javascript: URL into a link.
-  try { if (url && ["http:", "https:"].includes(new URL(url).protocol)) return `<a class="docker-status-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`; } catch { /* invalid old setting */ }
+  try { if (url && ["http:", "https:"].includes(new URL(url).protocol)) return `<a class="docker-status-link" title="${esc(`Open ${label}`)}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`; } catch { /* invalid old setting */ }
   return `<button class="docker-status-link" data-docker-settings="${esc(v.target.id)}">${esc(label)}</button>`;
 }
 
@@ -367,7 +368,7 @@ function render() {
   $("#overview-count").textContent = `${active().length} ${plural(active().length, "machine", "machines")}`;
   $("#schedule-status").innerHTML = scheduleStat();
   html("#check-os", `${icon("refresh")}<span>Check OS updates</span>`);
-  html("#check-containers", `${icon("boxes")}<span>Check container updates</span>`);
+  html("#check-containers", `${icon("container")}<span>Check container updates</span>`);
   $("#check-containers").hidden = !active().some(hasDocker);
   $("#check-containers").disabled = requestingDockhandChecks || (!nativeContainerHosts().length && !active().some(v => v.dockhand && state.settings.dockhand_checks_allowed));
   $("#check-containers").title = "Check containers using each machine's provider. Fleetdeck native checks pull images after confirmation; Dockhand checks registry metadata.";
@@ -478,17 +479,17 @@ function openMachineMenu(id, trigger) {
   const menu = $("#machine-actions");
   menu.innerHTML = `<div class="muted menu-caption">${esc(t.name)}${containerOnly ? " · Containers" : ""}</div>` +
     (containerOnly ? "" : action("check", "Check OS updates", "refresh", t.updatable && !busy)) +
-    (v.dockhand ? action("dockhand", "Check container updates", "boxes", state.settings.dockhand_checks_allowed && !v.dockhand.checking,
+    (v.dockhand ? action("dockhand", "Check container updates", "container", state.settings.dockhand_checks_allowed && !v.dockhand.checking,
       !state.settings.dockhand_checks_allowed ? "Enable dockhand.allow_checks in Settings to allow fresh checks" : v.dockhand.checking ? "A Dockhand check is already running" : "Request a fresh Dockhand digest check for this machine; no downloads or restarts")
-      : hasDocker(v) && dockerEnabled(v) ? action("stacks", "Check container updates", "boxes", canUpgrade(t) && !busy,
+      : hasDocker(v) && dockerEnabled(v) ? action("stacks", "Check container updates", "container", canUpgrade(t) && !busy,
         "Fleetdeck native checks pull Compose images; confirmation is required") : "") +
     (containerOnly || nextAction(v).includes('data-act="reboot"') ? "" : action("reboot", "Reboot", "reboot", canReboot(t) && !busy && !v.blocked, t.no_reboot || v.blocked || t.note)) +
     (!containerOnly && t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
-    (hasDocker(v) && !v.dockhand ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
+    `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` +
     (!containerOnly && canUpgrade(t) ? `<button data-cmd="${esc(id)}" title="${esc(v.update_command ? `Update runs: ${v.update_command}` : "Use the machine's own update command instead of the built-in OS upgrade")}">${icon("settings")}Update command…</button>` : "") +
     `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` +
     (!containerOnly && state.console?.enabled && !["stopped", "offline"].includes(t.status) ? `<button data-run="${esc(id)}">${icon("terminal")}Run command</button>` : "") +
-    (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("boxes")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
+    (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("container")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
   menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
   machineMenuId = id;
   machineMenuFocus = trigger.dataset.focusKey;
@@ -581,25 +582,65 @@ function openMachineInformation(id, trigger) {
 }
 
 function dockerModeFields() {
-  const external = $("#docker-mode").value === "external";
+  const mode = $("#docker-mode").value, dlg = $("#docker-settings-dialog");
+  const external = mode === "external", dockhand = mode === "dockhand";
   $("#docker-external-fields").hidden = !external;
   $("#docker-manager-url").disabled = !external;
   $("#docker-manager-name").disabled = !external;
+  $("#dockhand-connection-fields").hidden = !dockhand;
+  for (const el of $("#dockhand-connection-fields").querySelectorAll("input")) el.disabled = !dockhand;
+  const configChange = dockhand || dlg.dataset.wasDockhand === "true";
+  $("#docker-settings-save").disabled = dlg.dataset.loading === "true" || (configChange && dlg.dataset.writable !== "true");
 }
 
-function openDockerSettings(id) {
+let dockerSettingsRequest = 0;
+async function openDockerSettings(id) {
   const v = state.targets.find((item) => item.target.id === id);
   if (!v) return;
   closeMachineMenu();
   const policy = dockerSettings(v), dlg = $("#docker-settings-dialog");
+  const requestKey = String(++dockerSettingsRequest);
+  dlg.dataset.requestKey = requestKey;
   dlg.dataset.targetId = id;
+  dlg.dataset.writable = "false";
+  dlg.dataset.wasDockhand = String(!!v.dockhand);
+  dlg.dataset.loading = "true";
+  $("#docker-mode").disabled = true;
+  $("#docker-settings-apply").disabled = false;
   $("#docker-settings-title").textContent = `Docker management · ${v.target.name}`;
-  $("#docker-mode").value = policy.mode;
+  $("#docker-mode").value = v.dockhand ? "dockhand" : policy.mode;
   $("#docker-manager-name").value = policy.manager_name;
   $("#docker-manager-url").value = policy.manager_url || "";
+  $("#dockhand-token").value = "";
   $("#docker-settings-error").textContent = "";
+  $("#docker-settings-status").textContent = "Loading current options…";
+  $("#docker-settings-apply").hidden = true;
   dockerModeFields();
-  dlg.showModal();
+  if (!dlg.open) dlg.showModal();
+  try {
+    const data = await api(`/api/setup/docker-management?target_id=${encodeURIComponent(id)}`);
+    if (!dlg.open || dlg.dataset.targetId !== id || dlg.dataset.requestKey !== requestKey) return;
+    dlg.dataset.revision = data.revision;
+    dlg.dataset.wasDockhand = String(data.mode === "dockhand");
+    dlg.dataset.writable = String(data.writable);
+    dlg.dataset.canRestart = String(data.can_restart);
+    $("#docker-mode").value = data.mode;
+    $("#dockhand-url").value = data.url || "";
+    $("#dockhand-poll").value = data.poll_seconds;
+    $("#dockhand-environment").value = data.environment_id || "";
+    $("#dockhand-allow-checks").checked = data.allow_checks;
+    $("#dockhand-token").placeholder = data.token_configured ? "Leave blank to keep the saved token" : "Enter a token";
+    $("#dockhand-shared-note").textContent = data.shared_hosts
+      ? `Connection options affect all ${data.shared_hosts} mapped ${plural(data.shared_hosts, "machine", "machines")}. The environment ID applies only to this machine.`
+      : "Enter the Dockhand connection once, then select an environment ID for each machine.";
+    $("#docker-settings-status").textContent = !data.writable ? "Configuration is read-only. Change Dockhand mappings in Settings or in the server configuration."
+      : data.restart_pending ? "Saved configuration changes are waiting to be applied." : "Dockhand connection or provider changes need Save, then Apply. Native-only policies apply immediately.";
+    $("#docker-settings-apply").hidden = !data.restart_pending || !data.can_restart;
+  } catch (err) {
+    if (dlg.dataset.requestKey === requestKey) { $("#docker-settings-error").textContent = err.message; dlg.dataset.writable = "false"; }
+  } finally {
+    if (dlg.dataset.requestKey === requestKey) { dlg.dataset.loading = "false"; $("#docker-mode").disabled = false; dockerModeFields(); }
+  }
 }
 
 async function load(refresh = false) {
@@ -1028,23 +1069,42 @@ window.addEventListener("scroll", () => { closeMachineMenu(); closeMachineInform
 $("#clear-selected").onclick = () => { state.selected.clear(); render(); };
 $("#docker-mode").onchange = dockerModeFields;
 $("#docker-settings-close").onclick = () => $("#docker-settings-dialog").close();
+$("#docker-settings-dialog").addEventListener("close", () => { $("#dockhand-token").value = ""; });
 $("#docker-settings-form").onsubmit = async (e) => {
   e.preventDefault();
-  const dlg = $("#docker-settings-dialog"), id = dlg.dataset.targetId;
-  const body = { target_id: id, mode: $("#docker-mode").value, manager_name: $("#docker-manager-name").value.trim() || "Dockhand", manager_url: $("#docker-manager-url").value.trim() || null };
+  const dlg = $("#docker-settings-dialog"), id = dlg.dataset.targetId, mode = $("#docker-mode").value;
+  const body = { target_id: id, mode, manager_name: $("#docker-manager-name").value.trim() || "External manager", manager_url: $("#docker-manager-url").value.trim() || null };
+  const configChange = mode === "dockhand" || dlg.dataset.wasDockhand === "true";
   $("#docker-settings-save").disabled = true;
   $("#docker-settings-error").textContent = "";
   try {
-    const res = await api("/api/docker-settings", { method: "PUT", body: JSON.stringify(body) });
-    const view = state.targets.find((v) => v.target.id === id);
-    if (view) view.docker_settings = res.docker_settings;
-    dlg.close();
-    render();
-  } catch (err) {
-    $("#docker-settings-error").textContent = err.message;
-  } finally {
-    $("#docker-settings-save").disabled = false;
-  }
+    if (configChange) {
+      Object.assign(body, { revision: dlg.dataset.revision, url: $("#dockhand-url").value.trim(), token: $("#dockhand-token").value || null,
+        poll_seconds: Number($("#dockhand-poll").value), allow_checks: $("#dockhand-allow-checks").checked,
+        environment_id: mode === "dockhand" ? Number($("#dockhand-environment").value) : null });
+      const result = await api("/api/setup/docker-management", { method: "PUT", body: JSON.stringify(body) });
+      $("#dockhand-token").value = "";
+      await openDockerSettings(id);
+      $("#docker-settings-status").textContent = result.can_restart ? "Saved. Apply saved changes to activate the provider settings. No connection test or image check has been started."
+        : "Saved. Restart the Fleetdeck container to activate these settings. No check has been started.";
+      $("#docker-settings-status").scrollIntoView({ block: "nearest" });
+    } else {
+      const res = await api("/api/docker-settings", { method: "PUT", body: JSON.stringify(body) });
+      const view = state.targets.find((v) => v.target.id === id);
+      if (view) view.docker_settings = res.docker_settings;
+      dlg.close(); render();
+    }
+  } catch (err) { $("#docker-settings-error").textContent = err.message; }
+  finally { dockerModeFields(); }
+};
+$("#docker-settings-apply").onclick = async () => {
+  const button = $("#docker-settings-apply"); button.disabled = true;
+  try {
+    await api("/api/setup/apply", { method: "POST" });
+    $("#docker-settings-status").textContent = "Applying saved changes. Fleetdeck is restarting…";
+    schedule(1000);
+    setTimeout(() => location.reload(), 2000);
+  } catch (err) { $("#docker-settings-error").textContent = err.message; button.disabled = false; }
 };
 
 document.addEventListener("change", (e) => {

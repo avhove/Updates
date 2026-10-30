@@ -261,7 +261,8 @@ stale after a restart, then reconciled with current inventory. No source error b
 
 For mixed management, native Docker is available by default; map Dockhand hosts as above. Configured mappings override saved per-host settings
 and block native Docker jobs at submission, execution and resume, and skip native discovery.
-They cannot be changed through the per-machine policy dialog. Scheduled and bulk native checks
+They can be changed through each machine’s Docker management dialog, with Save then Apply. Live mappings
+continue to guard native jobs until Apply. Scheduled and bulk native checks
 exclude those hosts. Existing per-host external/disabled/monitor policies remain enforced.
 Use per-machine Disabled policies for other hosts whose containers Fleetdeck should not check.
 
@@ -544,14 +545,14 @@ mobile and desktop details without starting any action.
 
 ### Fixed metric slots, compact legend and machine information
 
-Each Updates cell reserves four positions. OS uses Security, Packages, Phased and Reboot;
-containers use Images, Review, Coverage and Failures. Missing metrics reserve noninteractive
-empty slots rather than moving other values or inventing zeroes. Unknown image counts stay
+Each Updates cell keeps a stable order. OS uses Security, Packages, Phased and Reboot;
+containers use Images, Review, Coverage and Failures. Only visible metrics occupy space,
+with a 14px gap between groups. Missing values never invent zeroes. Unknown image counts stay
 unavailable. Coverage uses a dashed-circle symbol, distinct from machine information.
 A compact Updates-only legend appears above the tables and follows All/Machines/Containers.
 The Containers tab no longer shows the count of hosts.
 
-OS and container update availability now share purple. Routine container metrics have no filled
+OS update availability is purple; container availability is blue, using Lucide’s generic container icon. Routine container metrics have no filled
 background; security, failure and reboot indicators retain emphasis. Review is amber and coverage
 neutral. Whole machine groups highlight together, including shared identity and backup cells.
 Individual controls keep their hover/focus treatment and existing action scopes.
@@ -661,3 +662,45 @@ restored; 6 skipped and the same 7 known platform checks were deselected. Tests 
 Docker without image operations, positive rediscovery over an older negative stack scan, both
 providers' scheduled flag/permission combinations and per-host disabled/monitor/external restrictions.
 Ruff formatting, lint and diff checks passed. No user configuration or live infrastructure changed.
+
+
+### Per-machine providers and final container presentation
+
+Every machine’s More menu includes Docker management, including existing Dockhand mappings.
+Choose Managed by Fleetdeck, Monitor only, Managed by Dockhand, Other external manager (link only)
+or Disabled. Dockhand fields contain URL, a write-only token, saved-report polling interval,
+fresh-check permission and the machine’s environment ID. There is no machine ID field: the
+selected machine supplies it. Connection settings are shared; the dialog states how many hosts
+use them. A blank token preserves the existing value or environment reference. A URL change
+requires a new token rather than forwarding an existing secret to another URL.
+
+Native-only policies still save immediately. Connection and provider mapping changes use the
+existing configuration file and Save then Apply, with revision checking, the shared config lock,
+existing authentication/CSRF and read-only handling, atomic private file writes and policy-failure
+rollback. Active jobs and active Dockhand checks block config changes/apply. Existing mapped hosts
+retain their native-job guard until restart applies the new provider. No opening/saving request
+connects to a manager or starts an image check. Metadata and validation responses never return
+stored/submitted tokens. The original authenticated full Settings editor is unchanged.
+
+Container headers now show one filter/count bar (All, Image updates, Up to date, Review, Coverage,
+Failures) and a small sync time. Current options and check history stay in the collapsed section:
+a compact name/value panel, direct Docker management and Schedule settings controls, and short
+provider-specific instructions. Failures and in-progress checks remain visible. Filters count
+independent findings and may overlap; no missing result becomes an up-to-date result.
+
+Container update colour is blue, OS availability remains purple, Review is teal and Reboot required
+is yellow. Lucide’s ISC-licensed container icon is included inline with its licence in static assets.
+Visible metrics are adjacent in a stable order with a 14px gap; missing metrics reserve no space.
+Actions are a fixed 144px and More buttons align to the far right. Scope and Updates receive more
+space while Machine absorbs the remaining width; narrower desktop widths use compact budgets.
+
+Final verification: 64 offline UI tests pass. The full backend run passed 525 tests (6 skipped,
+7 known platform checks deselected); the final app/Dockhand/provider-settings regression run
+passed 73 tests (1 skipped, Linux boot-ID check deselected). The monitor-only API test now skips
+real reboot polling backoff so random demo timing cannot exhaust its policy-test timeout.
+Browser checks used simulated machines only: desktop columns measure Actions 144px, Scope 112px,
+Updates 224px; ordinary metric groups have 14px gaps and share a line. The 1120px desktop and
+390px mobile views have no page overflow; the mobile provider dialog retains a visible footer.
+Existing tokens stay absent from the dialog, Save exposes Apply separately and starts no checks,
+and all metadata and validation responses keep tokens private. Current options show running
+settings; the dialog shows saved pending configuration until Apply. No homelab was contacted.

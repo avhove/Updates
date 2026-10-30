@@ -22,7 +22,7 @@ function machine(id, options = {}) {
   };
 }
 
-async function dashboard({ containers = true, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
+async function dashboard({ containers = true, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false, management = {} } = {}) {
   const { window, document } = parseHTML(read("index.html"));
   const calls = [], errors = [], storage = new Map([["dashboardView", JSON.stringify(rememberedView)]]);
   let activeElement = document.body;
@@ -30,9 +30,15 @@ async function dashboard({ containers = true, dockhandChecks = false, scheduledC
   window.HTMLElement.prototype.focus = function () { activeElement = this; };
   window.HTMLElement.prototype.getBoundingClientRect = () => ({ right: 900, bottom: 200, top: 175 });
   window.HTMLElement.prototype.scrollIntoView = () => {};
+  // Linkedom exposes select.value as read-only; model the browser's selected-option behavior.
+  Object.defineProperty(window.HTMLSelectElement.prototype, 'value', {
+    configurable: true,
+    get() { return this.querySelector('option[selected]')?.getAttribute('value') || this.querySelector('option')?.getAttribute('value') || ''; },
+    set(value) { for (const option of this.querySelectorAll('option')) { if (option.getAttribute('value') === String(value)) option.setAttribute('selected',''); else option.removeAttribute('selected'); } },
+  });
   window.HTMLElement.prototype.showModal = function () { this.open = true; };
   window.HTMLElement.prototype.close = function () { this.open = false; };
-  const data = { targets, errors: {}, settings: { containers_visible: containers, dockhand_checks_allowed: dockhandChecks, scheduled_container_checks: scheduledContainers, snapshot_before_upgrade: true } };
+  const data = { targets, errors: {}, settings: { dockhand_poll_seconds: targets.some(v => v.dockhand) ? 300 : null, containers_visible: containers, dockhand_checks_allowed: dockhandChecks, scheduled_container_checks: scheduledContainers, snapshot_before_upgrade: true } };
   const mobileQuery = { matches: mobile, addEventListener: (event, callback) => { mobileQuery.onChange = callback; } };
   const sandbox = {
     window, document, URL, innerWidth: 1200, innerHeight: 800,
@@ -46,6 +52,21 @@ async function dashboard({ containers = true, dockhandChecks = false, scheduledC
       if (path.startsWith("/api/targets")) body = data;
       else if (path === "/api/jobs") body = [];
       else if (path === "/api/schedule") body = schedule || { check_every: null };
+      else if (path.startsWith("/api/setup/docker-management") && !options.method) {
+        const id = decodeURIComponent(path.split("target_id=")[1]);
+        const v = data.targets.find(v => v.target.id === id);
+        body = management[id] || { revision: 'a'.repeat(64), writable: true, mode: v?.dockhand ? 'dockhand' : v?.docker_settings?.mode || 'managed',
+          url: v?.dockhand ? 'https://dockhand.example' : '', token_configured: !!v?.dockhand, poll_seconds: 300,
+          allow_checks: !!v?.dockhand, environment_id: v?.dockhand ? 1 : null, shared_hosts: v?.dockhand ? 1 : 0, can_restart: true };
+      }
+      else if (path === "/api/setup/docker-management" && options.method === 'PUT') {
+        const value = JSON.parse(options.body);
+        management[value.target_id] = { ...value, revision: 'b'.repeat(64), writable: true, token_configured: true, shared_hosts: 1, can_restart: true, restart_pending: true };
+        delete management[value.target_id].token;
+        body = { saved: true, restart_pending: true, can_restart: true };
+      }
+      else if (path === "/api/setup/apply") body = { restarting: true };
+      else if (path === "/api/docker-settings") body = { docker_settings: JSON.parse(options.body) };
       else if (path === "/api/actions") body = { jobs: [], rejected: {} };
       else if (path === "/api/dockhand/check") body = { started: true };
       else if (path === "/api/monitor-only") body = { monitor_only: [] };
@@ -804,10 +825,10 @@ test("Dockhand explains read-only sync, saved history and explicit fresh checks 
     ui.click('[data-open-docker="docker"]');
     const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
     assert.match(panel.textContent, /Dockhand’s own schedule is unchanged/);
-    assert.match(panel.textContent, /Automatic dashboard polling and Refresh inventory only read saved results/);
+    assert.match(panel.textContent, /Refresh inventory and dashboard polling only read saved reports/);
     assert.match(panel.textContent, /saved across Fleetdeck restarts/);
-    assert.match(panel.textContent, /Completed with 1 check error/);
-    assert.match(panel.textContent, /no reliable result is available/);
+    assert.match(panel.textContent, /Completed with 1 error/);
+    assert.match(panel.textContent, /Unknown means no reliable result/);
     assert.equal(panel.querySelector('script'), null);
     assert.equal(panel.querySelector('[data-label="Last checked"]').title, 'From Dockhand scheduled-check history');
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
@@ -1204,11 +1225,11 @@ test("container help shows actual settings and the effective outcome for schedul
     const box = panel.querySelector('.container-check-settings');
     const values = Object.fromEntries([...box.querySelectorAll('dl > div')].map(row => [row.querySelector('dt').textContent, row.querySelector('dd').textContent]));
     assert.deepEqual(values, { 'Container provider': 'Dockhand', 'Fleetdeck scheduled container checks': item.scheduled ? 'On' : 'Off',
-      'Manual container checks': item.allowed ? 'Enabled' : 'Disabled', 'Fleetdeck check interval': item.interval ? 'Every 6 h' : 'Scheduling off' });
+      'Manual container checks': item.allowed ? 'Enabled' : 'Disabled', 'Fleetdeck check interval': item.interval ? 'Every 6 h' : 'Scheduling off', 'Read saved Dockhand reports': 'Every 5 min' });
     assert.match(box.querySelector('.container-check-outcome').textContent, item.outcome);
     assert.match(box.textContent, /Dockhand’s own schedule is unchanged/);
-    assert.match(panel.querySelector('.container-help').textContent, /schedule.check_docker: true.*dockhand.allow_checks: true/);
-    assert.match(panel.querySelector('.container-help').textContent, /Mapped hosts always use Dockhand/);
+    assert.match(panel.querySelector('.container-help').textContent, /schedule.check_docker: true/);
+    assert.match(panel.querySelector('.container-help').textContent, /provider, connection and fresh-check permission/);
     assert.equal(panel.querySelector('.container-help a').getAttribute('href'), '/settings');
     assert.equal(panel.querySelector('.container-help').hasAttribute('open'), false);
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
@@ -1240,7 +1261,7 @@ test("native container guidance describes pulls and host policies without Dockha
   }
 });
 
-test("update metrics keep four stable slots and the top legend follows the selected scope", async () => {
+test("update metrics keep a stable order and the top legend follows the selected scope", async () => {
   for (const mobile of [false, true]) {
     const ui = await dashboard({ containers: true, mobile, targets: [
       machine('security', { check: { packages: [{ name: 'ssl', security: true, available: '2' }] } }),
@@ -1444,5 +1465,85 @@ test("a newly installed native Docker host appears after an ordinary OS result w
   ui.click('[data-machine-menu="external-docker"]');
   assert.equal(ui.document.querySelectorAll('#machine-actions [data-act="stacks"]').length, 0);
   assert.ok(ui.document.querySelector('#machine-actions [data-act="dockhand"]'));
+  assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+});
+
+test("Docker management is per machine and Dockhand fields never ask for a target ID or reveal a token", async () => {
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ mobile, targets: [machine('mapped', { view: { dockhand: { containers: [] },
+      docker_settings: { mode: 'external', manager_name: 'Dockhand', manager_url: 'https://dockhand.example' } } })] });
+    ui.click('[data-machine-menu="mapped"]'); ui.click('[data-docker-settings="mapped"]'); await flush();
+    const doc = ui.document;
+    assert.equal(doc.querySelector('#docker-settings-dialog').open, true);
+    assert.equal(doc.querySelector('#docker-mode').value, 'dockhand');
+    assert.equal(doc.querySelector('#dockhand-connection-fields').hidden, false);
+    assert.equal(doc.querySelector('#dockhand-token').value, '');
+    assert.match(doc.querySelector('#dockhand-token').placeholder, /Leave blank/);
+    assert.equal(doc.querySelector('#dockhand-environment').value, '1');
+    assert.equal(doc.querySelector('#docker-settings-dialog input[name="target_id"]'), null);
+    assert.equal(doc.querySelector('#docker-settings-dialog [id*="machine-id"]'), null);
+    assert.equal(ui.calls.some(c => c.method === 'POST' || c.method === 'PUT'), false);
+  }
+});
+
+test("per-machine Dockhand save maps the chosen machine, clears the token and keeps Apply separate", async () => {
+  const ui = await dashboard({ targets: [machine('new-provider')] });
+  const doc = ui.document;
+  ui.click('[data-machine-menu="new-provider"]'); ui.click('[data-docker-settings="new-provider"]'); await flush();
+  doc.querySelector('#docker-mode').value = 'dockhand'; doc.querySelector('#docker-mode').onchange();
+  doc.querySelector('#dockhand-url').value = 'https://dockhand.example';
+  doc.querySelector('#dockhand-token').value = 'entered-test-token';
+  doc.querySelector('#dockhand-environment').value = '4';
+  doc.querySelector('#dockhand-poll').value = '300';
+  doc.querySelector('#dockhand-allow-checks').checked = true;
+  await doc.querySelector('#docker-settings-form').onsubmit({ preventDefault() {} }); await flush();
+  const request = ui.calls.find(c => c.path === '/api/setup/docker-management' && c.method === 'PUT');
+  const saved = JSON.parse(request.body);
+  assert.equal(saved.target_id, 'new-provider'); assert.equal(saved.environment_id, 4);
+  assert.equal(saved.token, 'entered-test-token'); assert.equal(saved.allow_checks, true);
+  assert.equal(doc.querySelector('#dockhand-token').value, '');
+  assert.equal(doc.querySelector('#docker-settings-apply').hidden, false);
+  assert.match(doc.querySelector('#docker-settings-status').textContent, /Saved.*Apply/);
+  assert.equal(ui.calls.some(c => c.path === '/api/setup/apply' || c.path === '/api/dockhand/check' || c.path === '/api/actions'), false);
+  await doc.querySelector('#docker-settings-apply').onclick();
+  assert.equal(ui.calls.filter(c => c.path === '/api/setup/apply').length, 1);
+});
+
+test("native policies save immediately while read-only Dockhand configuration cannot be saved", async () => {
+  const ui = await dashboard({ targets: [machine('native-mode')] });
+  const doc = ui.document;
+  ui.click('[data-machine-menu="native-mode"]'); ui.click('[data-docker-settings="native-mode"]'); await flush();
+  doc.querySelector('#docker-mode').value = 'monitor'; doc.querySelector('#docker-mode').onchange();
+  await doc.querySelector('#docker-settings-form').onsubmit({ preventDefault() {} });
+  assert.equal(ui.calls.filter(c => c.path === '/api/docker-settings' && c.method === 'PUT').length, 1);
+  assert.equal(ui.calls.some(c => c.path === '/api/setup/docker-management' && c.method === 'PUT'), false);
+  assert.equal(doc.querySelector('#docker-settings-dialog').open, false);
+  const locked = await dashboard({ targets: [machine('locked-provider')], management: { 'locked-provider': {
+    revision: 'a'.repeat(64), writable: false, mode: 'dockhand', url: 'https://dockhand.example', token_configured: true,
+    poll_seconds: 300, environment_id: 2, shared_hosts: 2, allow_checks: false, can_restart: false,
+  } } });
+  locked.click('[data-machine-menu="locked-provider"]'); locked.click('[data-docker-settings="locked-provider"]'); await flush();
+  assert.equal(locked.document.querySelector('#docker-settings-save').disabled, true);
+  assert.match(locked.document.querySelector('#docker-settings-status').textContent, /read-only/);
+  assert.match(locked.document.querySelector('#dockhand-shared-note').textContent, /all 2 mapped machines/);
+});
+
+test("container overview consolidates counts and keeps history inside current options", async () => {
+  const ui = await dashboard({ targets: [machine('compact-panel', { view: { dockhand: {
+    synced_at: now, last_check_at: now, scheduled_check_at: now, scheduled_status: 'success', scheduled_checked: 2,
+    containers: [{ name: 'current-app', image: 'app:1', status: 'current', checked_at: now },
+      { name: 'new-app', image: 'new:1', status: 'update', checked_at: now }],
+  } } })] });
+  ui.click('.container-status-hit');
+  const panel = () => ui.document.querySelector('.container-detail');
+  assert.equal(panel().querySelectorAll('.container-summary').length, 0);
+  assert.equal(panel().querySelectorAll('.container-results-toolbar .container-filters').length, 1);
+  assert.equal(panel().querySelectorAll('.container-results-toolbar .container-sync').length, 1);
+  assert.ok(panel().querySelector('.container-help .container-schedule-report'));
+  assert.ok(panel().querySelector('.container-help [data-docker-settings="compact-panel"]'));
+  ui.click('[data-container-view-filter="current"]');
+  assert.equal(panel().querySelectorAll('.container-results-table tbody tr').length, 1);
+  assert.match(panel().querySelector('.container-results-table').textContent, /current-app/);
+  assert.doesNotMatch(panel().querySelector('.container-results-table').textContent, /new-app/);
   assert.equal(ui.calls.some(c => c.method === 'POST'), false);
 });
