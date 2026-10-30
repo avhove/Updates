@@ -22,7 +22,7 @@ function machine(id, options = {}) {
   };
 }
 
-async function dashboard({ docker = false, containers = false, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
+async function dashboard({ containers = true, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
   const { window, document } = parseHTML(read("index.html"));
   const calls = [], errors = [], storage = new Map([["dashboardView", JSON.stringify(rememberedView)]]);
   let activeElement = document.body;
@@ -32,7 +32,7 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
   window.HTMLElement.prototype.scrollIntoView = () => {};
   window.HTMLElement.prototype.showModal = function () { this.open = true; };
   window.HTMLElement.prototype.close = function () { this.open = false; };
-  const data = { targets, errors: {}, settings: { docker_enabled: docker, containers_visible: containers, dockhand_checks_allowed: dockhandChecks, scheduled_container_checks: scheduledContainers, snapshot_before_upgrade: true } };
+  const data = { targets, errors: {}, settings: { containers_visible: containers, dockhand_checks_allowed: dockhandChecks, scheduled_container_checks: scheduledContainers, snapshot_before_upgrade: true } };
   const mobileQuery = { matches: mobile, addEventListener: (event, callback) => { mobileQuery.onChange = callback; } };
   const sandbox = {
     window, document, URL, innerWidth: 1200, innerHeight: 800,
@@ -151,27 +151,16 @@ test("dashboard retains the shared backup dialog and passphrase checks", async (
   assert.equal(ui.calls.some(call => call.path === '/api/backup'), false);
 });
 
-test("OS-only default hides all Docker UI, including an old remembered Containers view", async () => {
-  const pending = machine("pve1", { check: { packages: [{ name: "curl", current: "1", available: "2", security: true }], docker_installed: true },
-    view: { stacks: { docker: "yes", stacks: [] } } });
+test("native Docker is available without a global switch and discovered hosts appear automatically", async () => {
+  const pending = machine("pve1", { check: { packages: [{ name: "curl", available: "2" }], docker_installed: true } });
   const ui = await dashboard({ targets: [pending, machine("pve2")], rememberedView: "containers" });
-  const { document: doc } = ui;
-  assert.equal(doc.querySelector(".view-tabs").hidden, true);
-  assert.equal(doc.querySelector("#groups").hidden, false);
-  assert.equal(doc.querySelector("#containers").hidden, true);
-  assert.equal(doc.querySelector("#containers").innerHTML, "");
-  assert.equal(doc.querySelector('[data-label="Containers"]'), null);
-  assert.doesNotMatch(doc.querySelector("#summary").textContent, /Docker|stacks|images/);
-  assert.equal(doc.querySelectorAll('[data-act="upgrade"]').length, 1);
-  ui.click('[data-machine-menu="pve1"]');
-  assert.doesNotMatch(doc.querySelector("#machine-actions").textContent, /Docker/);
-  ui.click("#check-all");
-  await flush();
-  const actions = ui.calls.filter((call) => call.path === "/api/actions");
-  assert.equal(actions.length, 1);
-  assert.deepEqual(JSON.parse(actions[0].body).target_ids, ["pve1", "pve2"]);
-  assert.equal(JSON.parse(actions[0].body).action, "check");
-  assert.deepEqual(ui.errors, []);
+  assert.equal(ui.document.querySelector(".view-tabs").hidden, false);
+  assert.equal("docker_enabled" in ui.state.settings, false);
+  assert.ok(ui.document.querySelector('[data-machine-row="pve1"].container-row'));
+  assert.equal(ui.document.querySelector('[data-machine-row="pve2"].container-row'), null);
+  ui.click('#view-machines'); ui.click('[data-machine-menu="pve1"]');
+  assert.match(ui.document.querySelector('#machine-actions').textContent, /Docker management/);
+  assert.equal(ui.calls.some(call => call.method === 'POST'), false);
 });
 
 test("host panels and guest rows keep stable order across inventory refreshes", async () => {
@@ -610,7 +599,7 @@ test("optional Docker status is separate, honest about failed checks, and never 
   const stacks = { docker: "yes", compose: "v2", checked_at: now, stacks: [
     { name: "unreachable", state: "running", error: "registry unavailable", services: [], update_available: true },
   ] };
-  const ui = await dashboard({ docker: true, targets: [machine("docker-vm", { target: { backup: { last: now, storage: "/backup", count: 1, stale: false } }, check: { docker_installed: true }, view: { stacks } }), machine("plain", { check: { docker_installed: false } })] });
+  const ui = await dashboard({ targets: [machine("docker-vm", { target: { backup: { last: now, storage: "/backup", count: 1, stale: false } }, check: { docker_installed: true }, view: { stacks } }), machine("plain", { check: { docker_installed: false } })] });
   assert.equal(ui.document.querySelector(".view-tabs").hidden, false);
   const dockerTable = ui.document.querySelector('[data-machine-row="docker-vm"]').closest("table");
   assert.equal(dockerTable.classList.contains("has-backup"), true);
@@ -674,7 +663,7 @@ test("native Docker counts services, distinguishes missing Compose coverage and 
       { name: 'web', status: 'running', outdated: true }, { name: 'worker', status: 'running', outdated: true },
     ] },
   ] };
-  const ui = await dashboard({ docker: true, targets: [
+  const ui = await dashboard({ targets: [
     machine('native', { view: { stacks }, check: { packages: [{ name: 'curl', current: '1', available: '2' }] } }),
     machine('empty', { view: { stacks: { ...stacks, stacks: [] } } }),
   ] });
@@ -928,7 +917,7 @@ test("per-machine menu separates OS and Dockhand checks and targets only the sel
 
 test("native container menu keeps its pull confirmation and disappears when Docker is disabled", async () => {
   for (const docker of [false, true]) {
-    const ui = await dashboard({ docker, targets: [machine('native', { check: { docker_installed: true } })] });
+    const ui = await dashboard({ targets: [machine('native', { check: { docker_installed: true }, view: { docker_settings: { mode: docker ? "managed" : "disabled" } } })] });
     ui.click('[data-machine-menu="native"]');
     const check = ui.document.querySelector('#machine-actions [data-act="stacks"]');
     if (!docker) { assert.equal(check, null); continue; }
@@ -1009,7 +998,7 @@ test("mixed-provider bulk checks require native pull confirmation and preserve e
   ] };
   const targets = [machine('native', { check: { docker_installed: true }, view: { stacks } }),
     machine('external', { view: { dockhand: { stale: false, containers: [] }, docker_settings: { mode: 'external' } } })];
-  const ui = await dashboard({ docker: true, containers: true, dockhandChecks: true, targets });
+  const ui = await dashboard({ containers: true, dockhandChecks: true, targets });
   assert.equal(ui.document.querySelector('#check-containers').disabled, false);
   await ui.document.querySelector('#check-containers').onclick();
   assert.match(ui.document.querySelector('#confirm-text').textContent, /download \(pull\).*Dockhand/i);
@@ -1045,7 +1034,7 @@ test("shared native details keep monitor, check-only and dashboard deployment gu
         docker_settings: { mode: variant === 'monitor' ? 'monitor' : 'managed' },
         stacks: { docker: 'yes', compose: 'v2', checked_at: now, stacks: [{ ...stack, is_dashboard: variant === 'dashboard' }] },
       } });
-    const ui = await dashboard({ docker: true, containers: true, targets: [target] });
+    const ui = await dashboard({ containers: true, targets: [target] });
     ui.click('[data-open-docker="native"]');
     const panel = ui.document.querySelector('.container-detail');
     const deploy = panel.querySelector('[data-stack="app"]');
@@ -1133,7 +1122,7 @@ test("rowspan accounting holds with both detail panels open and container KPI pr
 });
 
 test("native container jobs do not replace OS status and keep install guards intact", async () => {
-  const ui = await dashboard({ docker: true, targets: [machine('native', { check: { docker_installed: true }, view: {
+  const ui = await dashboard({ targets: [machine('native', { check: { docker_installed: true }, view: {
     active_job: { action: 'stacks' }, stacks: { docker: 'yes', checked_at: now, stacks: [] },
   } })] });
   assert.match(ui.document.querySelector('.scope-os .update-status-cell').textContent, /Up to date/);
@@ -1219,7 +1208,7 @@ test("container help shows actual settings and the effective outcome for schedul
     assert.match(box.querySelector('.container-check-outcome').textContent, item.outcome);
     assert.match(box.textContent, /Dockhand’s own schedule is unchanged/);
     assert.match(panel.querySelector('.container-help').textContent, /schedule.check_docker: true.*dockhand.allow_checks: true/);
-    assert.match(panel.querySelector('.container-help').textContent, /docker_enabled: false/);
+    assert.match(panel.querySelector('.container-help').textContent, /Mapped hosts always use Dockhand/);
     assert.equal(panel.querySelector('.container-help a').getAttribute('href'), '/settings');
     assert.equal(panel.querySelector('.container-help').hasAttribute('open'), false);
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
@@ -1232,7 +1221,7 @@ test("container help shows actual settings and the effective outcome for schedul
 
 test("native container guidance describes pulls and host policies without Dockhand configuration instructions", async () => {
   for (const checkOnly of [false, true]) {
-    const ui = await dashboard({ docker: true, containers: true, scheduledContainers: true,
+    const ui = await dashboard({ containers: true, scheduledContainers: true,
       schedule: { check_every: 3600 }, targets: [machine('native', { target: { check_only: checkOnly },
         check: { docker_installed: true }, view: { docker_settings: { mode: 'monitor' } },
       })] });
@@ -1335,7 +1324,7 @@ test("upstream monitor menu blocks deployments without changing native or Dockha
   ui.click('[data-monitor="1"]'); await flush();
   assert.equal(target.monitor_only, true);
   assert.equal(ui.document.querySelector('[data-act="upgrade"]'), null);
-  assert.equal(ui.state.settings.docker_enabled, false);
+  assert.equal("docker_enabled" in ui.state.settings, false);
   ui.click('[data-machine-menu="monitor-menu"]');
   ui.click('[data-monitor="0"]'); await flush();
   assert.equal(target.monitor_only, false);
@@ -1439,4 +1428,21 @@ test("Boot up is scoped to eligible stopped Proxmox guests and requires explicit
     assert.equal(JSON.parse(request.body).action, 'start');
     assert.deepEqual(JSON.parse(request.body).target_ids, ['stopped-vm']);
   }
+});
+
+test("a newly installed native Docker host appears after an ordinary OS result without changing settings", async () => {
+  const host = machine('new-docker', { check: { docker_installed: false } });
+  const external = machine('external-docker', { view: { dockhand: { containers: [] }, docker_settings: { mode: 'external' } } });
+  const ui = await dashboard({ targets: [host, external] });
+  ui.setView('all');
+  assert.equal(ui.document.querySelectorAll('[data-container-row="new-docker"]').length, 0);
+  host.check.docker_installed = true;
+  ui.render();
+  assert.equal(ui.document.querySelectorAll('[data-container-row="new-docker"]').length, 1);
+  ui.click('[data-machine-menu="new-docker"]');
+  assert.ok(ui.document.querySelector('#machine-actions [data-act="stacks"]'));
+  ui.click('[data-machine-menu="external-docker"]');
+  assert.equal(ui.document.querySelectorAll('#machine-actions [data-act="stacks"]').length, 0);
+  assert.ok(ui.document.querySelector('#machine-actions [data-act="dockhand"]'));
+  assert.equal(ui.calls.some(c => c.method === 'POST'), false);
 });

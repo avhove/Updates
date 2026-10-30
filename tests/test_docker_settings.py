@@ -17,7 +17,7 @@ from fleetdeck.updates import CHECK_SCRIPT, DOCKER_DETECT_SCRIPT, parse_check, p
 
 @pytest.mark.parametrize("mode", ["disabled", "external"])
 async def test_disabled_and_external_modes_block_all_docker_jobs_but_allow_os_checks(mode):
-    jobs = JobManager(_inventory((_target(), FakeExecutor())), docker_enabled=True)
+    jobs = JobManager(_inventory((_target(), FakeExecutor())))
     jobs.set_docker_settings("t1", DockerSettings(mode=mode))
     for action in ("stacks", "stack-update"):
         with pytest.raises(ValueError, match=mode):
@@ -28,7 +28,7 @@ async def test_disabled_and_external_modes_block_all_docker_jobs_but_allow_os_ch
 
 
 async def test_monitor_allows_checks_but_rejects_stack_updates():
-    jobs = JobManager(_inventory((_target(), FakeExecutor())), docker_enabled=True)
+    jobs = JobManager(_inventory((_target(), FakeExecutor())))
     jobs.set_docker_settings("t1", DockerSettings(mode="monitor"))
     jobs._set_stacks(
         "t1",
@@ -49,7 +49,7 @@ async def test_monitor_allows_checks_but_rejects_stack_updates():
 
 async def test_scheduler_skips_docker_on_externally_managed_hosts(monkeypatch):
     inv = _inventory((_target(), FakeExecutor()))
-    jobs = JobManager(inv, docker_enabled=True)
+    jobs = JobManager(inv)
     jobs.set_docker_settings("t1", DockerSettings(mode="external"))
     monkeypatch.setattr(inv, "refresh", AsyncMock())
     scheduler = Scheduler(None, inv, jobs, None, check_docker=True)
@@ -58,7 +58,7 @@ async def test_scheduler_skips_docker_on_externally_managed_hosts(monkeypatch):
 
 
 def test_api_settings_persist_and_are_enforced_for_bulk_actions(tmp_path):
-    cfg = AppConfig(demo=True, docker_enabled=True, state_file=str(tmp_path / "state.db"))
+    cfg = AppConfig(demo=True, state_file=str(tmp_path / "state.db"))
     with TestClient(create_app(cfg)) as client:
         vm = next(v for v in client.get("/api/targets").json()["targets"] if v["target"]["name"] == "docker-vm")
         tid = vm["target"]["id"]
@@ -102,16 +102,17 @@ def test_capability_detection_does_not_require_a_docker_pull(marker, expected):
     assert parse_docker_installed(text) is expected
 
 
-def test_default_os_only_dashboard_rejects_manual_and_bulk_docker_jobs():
+def test_native_support_is_available_by_default_and_host_disable_blocks_jobs():
     cfg = AppConfig(demo=True, schedule=ScheduleConfig(check_docker=True))
     app = create_app(cfg)
     with TestClient(app) as client:
         data = client.get("/api/targets").json()
-        assert data["settings"]["docker_enabled"] is False
+        assert "docker_enabled" not in data["settings"]
+        assert data["settings"]["containers_visible"] is True
         assert app.state.scheduler.check_docker is True  # Preserve the configured schedule flag.
         assert app.state.scheduler.dockhand is None
-        assert app.state.jobs.docker_enabled is False  # Native operations remain blocked independently.
         tid = data["targets"][0]["target"]["id"]
+        app.state.jobs.set_docker_settings(tid, DockerSettings(mode="disabled"))
         for action in ("stacks", "stack-update"):
             result = client.post("/api/actions", json={"action": action, "target_ids": [tid]}).json()
             assert not result["jobs"] and "disabled" in result["rejected"][tid]
@@ -120,6 +121,7 @@ def test_default_os_only_dashboard_rejects_manual_and_bulk_docker_jobs():
 async def test_docker_disabled_scheduler_only_checks_os(monkeypatch):
     inv = _inventory((_target(), FakeExecutor()))
     jobs = JobManager(inv)
+    jobs.set_docker_settings("t1", DockerSettings(mode="disabled"))
     monkeypatch.setattr(inv, "refresh", AsyncMock())
     await Scheduler(None, inv, jobs, None, check_docker=True).run_once()
     assert [job.action for job in jobs.jobs.values()] == ["check"]
@@ -150,6 +152,7 @@ async def test_docker_disabled_does_not_resume_a_stack_deployment():
             pytest.fail("A disabled Docker job must not run remote commands")
 
     jobs = JobManager(_inventory((_target(), NoCommands())))
+    jobs.set_docker_settings("t1", DockerSettings(mode="disabled"))
     job = Job(
         id="old",
         target_id="t1",
@@ -171,7 +174,7 @@ async def test_queued_docker_job_rechecks_policy_before_starting():
 
     gate = asyncio.Event()
     ex = FakeExecutor(gate=gate)
-    jobs = JobManager(_inventory((_target(), ex)), docker_enabled=True)
+    jobs = JobManager(_inventory((_target(), ex)))
     jobs.submit("t1", "check")
     job = jobs.submit("t1", "stacks")
     # Simulate a policy/config change after enqueue; execution must still enforce it.
@@ -179,3 +182,56 @@ async def test_queued_docker_job_rechecks_policy_before_starting():
     gate.set()
     await _finish(jobs)
     assert job.status == "failed" and "external" in job.error
+
+
+async def test_regular_os_check_discovers_new_docker_installation_without_image_operations():
+    class NewlyInstalledDocker(FakeExecutor):
+        installed = False
+
+        def __init__(self):
+            super().__init__()
+            self.scripts = []
+
+        async def run(self, script, on_line=None, timeout=0):
+            self.scripts.append(script)
+            if script == DOCKER_DETECT_SCRIPT:
+                return ExecResult(rc=0, stdout=f"__DOCKER_INSTALLED__={'yes' if self.installed else 'no'}\n")
+            assert script == CHECK_SCRIPT
+            return await super().run(script, on_line, timeout)
+
+    ex = NewlyInstalledDocker()
+    jobs = JobManager(_inventory((_target(), ex)))
+    jobs.submit("t1", "check")
+    await _finish(jobs)
+    assert jobs.checks["t1"].docker_installed is False
+    ex.installed = True
+    jobs.submit("t1", "check")
+    await _finish(jobs)
+    assert jobs.checks["t1"].docker_installed is True
+    assert not jobs.stacks
+    assert ex.scripts == [CHECK_SCRIPT, DOCKER_DETECT_SCRIPT] * 2
+
+
+async def test_fresh_positive_detection_overrides_old_negative_scan_for_scheduled_check(monkeypatch):
+    from fleetdeck.models import CheckResult
+
+    inv = _inventory((_target(), FakeExecutor()))
+    inv.refresh = AsyncMock()
+    jobs = JobManager(inv)
+    jobs._set_check("t1", CheckResult(checked_at=datetime.now(UTC), docker_installed=True))
+    jobs._set_stacks("t1", StacksResult(docker="none", checked_at=datetime.now(UTC)))
+    called = []
+    submit = jobs.submit
+
+    def record(tid, action, *args, **kwargs):
+        called.append(action)
+        return submit(tid, action, *args, **kwargs)
+
+    monkeypatch.setattr(jobs, "submit", record)
+    await Scheduler(None, inv, jobs, None, check_docker=True).run_once()
+    assert called == ["check", "stacks"]
+
+
+def test_docker_global_enable_flag_is_not_part_of_configuration():
+    assert "docker_enabled" not in AppConfig.model_fields
+    assert ScheduleConfig().check_docker is False

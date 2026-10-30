@@ -40,14 +40,11 @@ snapshot_keep: 3
 # update, the same as typing `update` in them, instead of the OS upgrade (which only runs if it fails). It fetches the latest script from
 # GitHub, runs it as root, and can upgrade the app itself. Set false and the job only warns.
 community_scripts_update: true
-# This fork defaults to an OS-only dashboard. Enable only if Fleetdeck should also manage Docker.
-# false skips native capability/image checks and rejects Docker API jobs.
-# Docker UI stays hidden unless this or the independent Dockhand status integration is configured.
-docker_enabled: false
-# Optional, read-only Dockhand status. Keep docker_enabled false when Dockhand manages all containers.
-# Uses GET only; never triggers Dockhand checks, pulls, updates or restarts.
-# Use exact Fleetdeck target IDs from the authenticated /api/targets response, not display names.
-# Configured mappings always block native Docker jobs on those targets, even with docker_enabled true.
+# Native Docker support is available by default, as in upstream Fleetdeck.
+# OS checks discover Docker without pulling images; native image checks cover Compose only.
+# Per-machine Docker management controls Managed / Monitor only / External / Disabled.
+# Optional Dockhand status: ordinary polling reads saved reports only.
+# Exact target IDs from /api/targets select Dockhand instead of native Docker on those hosts.
 # dockhand:
 #   url: https://dockhand.example
 #   token: ${FLEETDECK_DOCKHAND_TOKEN}
@@ -70,7 +67,7 @@ docker_enabled: false
 schedule:
   check_every: 6h
   # Include container checks in scheduled rounds (off by default), using each machine's provider.
-  # Fleetdeck native: requires docker_enabled: true and downloads Compose images.
+  # Fleetdeck native: downloads Compose images on Managed or Monitor only hosts.
   # Dockhand: requires dockhand.allow_checks: true and compares registry metadata; no image-layer downloads.
   # Docker deployments/restarts are never scheduled by this flag.
   # check_docker: true

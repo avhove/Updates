@@ -107,7 +107,6 @@ class JobManager:
         backup_folder: Path | None = None,
         age_recipient: str | None = None,
         backup_password: str | None = None,
-        docker_enabled: bool = False,
         dockhand_targets: dict[str, str] | None = None,
     ):
         self.inventory = inventory
@@ -119,7 +118,6 @@ class JobManager:
         self.backup_password = backup_password
         self.snapshot_keep = snapshot_keep
         self.community_scripts_update = community_scripts_update
-        self.docker_enabled = docker_enabled
         self.dockhand_targets = dockhand_targets or {}
         self.sem = asyncio.Semaphore(max_parallel)
         self.store = store
@@ -196,8 +194,6 @@ class JobManager:
     def _ensure_docker_action(self, target_id: str, action: JobAction) -> None:
         if action not in ("stacks", "stack-update"):
             return
-        if not self.docker_enabled:
-            raise ValueError("Docker management is disabled in the dashboard configuration")
         settings = self.get_docker_settings(target_id)
         if settings.mode in ("external", "disabled"):
             raise ValueError(f"Docker management is {settings.mode} on this machine")
@@ -467,7 +463,7 @@ class JobManager:
                     check = await _check(
                         executor,
                         on_line,
-                        discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets,
+                        discover_docker=job.target_id not in self.dockhand_targets,
                     )
                     self._set_check(job.target_id, check)
                     if check.error:
@@ -490,7 +486,7 @@ class JobManager:
                                 job.target_id,
                                 await _check(
                                     executor,
-                                    discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets,
+                                    discover_docker=job.target_id not in self.dockhand_targets,
                                 ),
                             )
                         except Exception as e:  # noqa: BLE001 - the rollback itself worked
@@ -705,9 +701,7 @@ class JobManager:
         job.log.append("== Re-checking for remaining updates")
         # The upgrade itself worked; a failed re-check is reported but doesn't fail the job.
         try:
-            check = await _check(
-                executor, discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets
-            )
+            check = await _check(executor, discover_docker=job.target_id not in self.dockhand_targets)
         except Exception as e:  # noqa: BLE001
             check = CheckResult(checked_at=_now(), error=str(e) or type(e).__name__)
         self._set_check(job.target_id, check)
@@ -808,9 +802,7 @@ class JobManager:
             if attempt:
                 await asyncio.sleep(REBOOT_POLL)
             try:
-                check = await _check(
-                    executor, discover_docker=self.docker_enabled and job.target_id not in self.dockhand_targets
-                )
+                check = await _check(executor, discover_docker=job.target_id not in self.dockhand_targets)
             except Exception as e:  # noqa: BLE001
                 check = CheckResult(checked_at=_now(), error=str(e) or type(e).__name__)
             if not check.error:

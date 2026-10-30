@@ -144,7 +144,6 @@ def test_config_rejects_unsafe_urls(url):
 async def test_mapping_blocks_native_jobs_even_when_native_enabled_and_policy_changes():
     jobs = JobManager(
         _inventory((_target(), FakeExecutor())),
-        docker_enabled=True,
         dockhand_targets={"t1": "https://dockhand.example"},
     )
     for action in ("stacks", "stack-update"):
@@ -168,12 +167,12 @@ def test_status_api_keeps_token_private_and_docker_disabled(tmp_path, monkeypatc
         data = response.json()
         assert data["settings"]["containers_visible"] is True
         assert data["settings"]["dockhand_results_persistent"] is True
-        assert data["settings"]["docker_enabled"] is False
+        assert "docker_enabled" not in data["settings"]
         assert data["targets"][0]["docker_settings"]["mode"] == "external"
         assert cfg.dockhand.token not in response.text
         rejected = client.post("/api/actions", json={"action": "stacks", "target_ids": ["t1"]}).json()
         assert not rejected["jobs"]
-        assert "disabled" in rejected["rejected"]["t1"]
+        assert "external" in rejected["rejected"]["t1"]
         reader.refresh.assert_awaited_with(force=False)
         assert client.get("/api/targets?refresh=true").status_code == 200
         reader.refresh.assert_awaited_with(force=True)
@@ -235,7 +234,7 @@ async def test_scheduled_os_checks_skip_native_discovery_and_pulls_on_dockhand_m
     executor.run = AsyncMock(wraps=executor.run)
     inv = _inventory((_target(), executor))
     monkeypatch.setattr(inv, "refresh", AsyncMock())
-    jobs = JobManager(inv, docker_enabled=True, dockhand_targets={"t1": "https://dockhand.example"})
+    jobs = JobManager(inv, dockhand_targets={"t1": "https://dockhand.example"})
     scheduler = Scheduler(None, inv, jobs, None, check_docker=True)
     await scheduler.run_once()
     assert [job.action for job in jobs.jobs.values()] == ["check"]

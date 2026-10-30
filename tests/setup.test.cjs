@@ -22,7 +22,7 @@ async function administration(page, options = {}) {
   const storage = new Map();
   const store = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   const calls = [], alerts = [];
-  const config = 'docker_enabled: false\nschedule:\n  check_every: 6h\n';
+  const config = 'schedule:\n  check_every: 6h\n';
   const state = { first_run: false, writable: true, config_path: 'demo/config.yaml', machines: [], running: [], restart_pending: false, can_restart: true, ...options.state };
   const context = vm.createContext({
     window, document, URLSearchParams, setTimeout: () => 1, clearTimeout: () => {}, alert: message => alerts.push(message),

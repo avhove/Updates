@@ -228,7 +228,7 @@ async def test_scheduled_docker_check_is_opt_in_and_skips_machines_without_docke
     async def run(**kw):
         inv = _inventory((_target("pi4"), PkgExecutor([])), (_target("vps"), PkgExecutor([])))
         inv.refresh = _noop_refresh
-        jobs = JobManager(inv, docker_enabled=True)
+        jobs = JobManager(inv)
         jobs.stacks["vps"] = StacksResult(docker="none", checked_at=datetime.now(UTC))
         asked = []
         real = jobs.submit
@@ -253,6 +253,10 @@ class SecExecutor(FakeExecutor):
         if script == CHECK_SCRIPT:
             body = "openssl/stable-security 2.0 amd64 [upgradable from: 1.0]" if self.pending else ""
             return ExecResult(rc=0, stdout=f"__PM__=apt\n__OS__=Debian\n__BEGIN__\n{body}\n__END__\n__REBOOT__=no\n")
+        from fleetdeck.updates import DOCKER_DETECT_SCRIPT
+
+        if script == DOCKER_DETECT_SCRIPT:
+            return ExecResult(rc=0, stdout="__DOCKER_INSTALLED__=no\n")
         self.calls.append(f"{self.name}:{'security' if script == SECURITY_UPGRADE_SCRIPT else 'full'}")
         await asyncio.sleep(0)
         self.pending = False

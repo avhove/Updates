@@ -151,7 +151,6 @@ def create_app(
         backup_folder,
         cfg.backup_age_recipient,
         cfg.backup_password,
-        docker_enabled=cfg.docker_enabled,
         dockhand_targets={m.target_id: cfg.dockhand.url for m in cfg.dockhand.environments} if cfg.dockhand else {},
     )
     # Demo mode must never contact a configured external manager.
@@ -284,8 +283,7 @@ def create_app(
             "settings": {
                 "snapshot_before_upgrade": cfg.snapshot_before_upgrade,
                 "community_scripts_update": cfg.community_scripts_update,
-                "docker_enabled": cfg.docker_enabled,
-                "containers_visible": bool(cfg.docker_enabled or cfg.dockhand),
+                "containers_visible": True,
                 "dockhand_checks_allowed": bool(cfg.dockhand and cfg.dockhand.allow_checks),
                 "dockhand_results_persistent": store is not None,
                 "scheduled_container_checks": cfg.schedule.check_docker,

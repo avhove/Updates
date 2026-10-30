@@ -22,10 +22,9 @@ are labelled Standalone. Clicking each metric opens its corresponding details fi
 overlap for one container. Mobile cards use the same separate OS/container sections and actions,
 with shared identity and backup context and no bulk-selection controls.
 
-For a Dockhand-only installation, keep native Docker checks and management disabled:
+For a Dockhand-managed host, configure an exact mapping. This automatically blocks native Docker jobs on that host:
 
 ```yaml
-docker_enabled: false
 dockhand:
   url: https://dockhand.example
   token: ${FLEETDECK_DOCKHAND_TOKEN}
@@ -62,7 +61,7 @@ The application supports native Docker, Dockhand and a mixed fleet. Shared wordi
 
 | Requirement | Fleetdeck native Docker | Dockhand |
 | --- | --- | --- |
-| Provider enabled | `docker_enabled: true`, eligible managed/monitor host | Exact environment mapping |
+| Provider enabled | Available by default, eligible managed/monitor host | Exact environment mapping |
 | Permission for a fresh check | Existing native policy | `dockhand.allow_checks: true` |
 | Included in Fleetdeck scheduled rounds | Also `schedule.check_docker: true` | Also `schedule.check_docker: true` |
 | Check operation | Pull Compose images to compare | Query registry digests and metadata |
@@ -70,10 +69,9 @@ The application supports native Docker, Dockhand and a mixed fleet. Shared wordi
 | Coverage | Compose services only | Containers exposed by Dockhand, including standalone |
 
 `schedule.check_docker: false` disables fresh container checks in Fleetdeck scheduled rounds
-for **both** providers. It does not disable explicit manual checks. `docker_enabled: false`
-continues to block native Docker checks, deployments and discovery; it does not enable native
-fallback for a Dockhand host. A Dockhand-only installation keeps that native setting false.
-Neither flag edits Dockhand's own schedule. Its independent scheduled runs continue normally.
+for **both** providers. It does not disable explicit manual checks. Dockhand mappings block native
+fallback on their hosts. Per-machine Disabled or External policies block native jobs elsewhere.
+The flag never edits Dockhand's own schedule. Its independent scheduled runs continue normally.
 
 **Check all** and global **Check container updates** route to both enabled providers. If any
 native hosts participate, a confirmation explains image downloads before container checks start;
@@ -181,8 +179,8 @@ Unsupported future log formats remain unknown instead of being guessed healthy.
 
 ### Explicit Dockhand image checks
 
-Set `dockhand.allow_checks: true` and apply/restart to enable **Check in Dockhand**. Keep
-`docker_enabled: false` when using Dockhand only. The check button opens a confirmation naming
+Set `dockhand.allow_checks: true` and apply/restart to enable **Check in Dockhand**. Exact
+mappings prevent native Docker jobs on those hosts. The check button opens a confirmation naming
 the mapped machine. Confirming that dialog, or explicitly clicking the dashboard's
 **Check container updates** menu item or top **Check all** button, uses the authenticated, CSRF-protected `POST /api/dockhand/check` endpoint for each
 exact configured environment.
@@ -261,12 +259,11 @@ the last successful inventory with a stale notice and muted last-known counts. W
 results, the update metric shows `—`; coverage and failure indicators explain why. Saved results are restored
 stale after a restart, then reconciled with current inventory. No source error bodies or tokens are sent to the browser.
 
-For mixed management, explicitly enable `docker_enabled: true` for Fleetdeck's existing native
-features, and map Dockhand hosts as above. Configured mappings override saved per-host settings
+For mixed management, native Docker is available by default; map Dockhand hosts as above. Configured mappings override saved per-host settings
 and block native Docker jobs at submission, execution and resume, and skip native discovery.
 They cannot be changed through the per-machine policy dialog. Scheduled and bulk native checks
 exclude those hosts. Existing per-host external/disabled/monitor policies remain enforced.
-Do not enable native management in a Dockhand-only configuration.
+Use per-machine Disabled policies for other hosts whose containers Fleetdeck should not check.
 
 Fleetdeck's native implementation still checks Compose stacks only. Its metric counts
 outdated running services, not stacks, and its action remains **Update stack** with the existing
@@ -391,42 +388,25 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
 Existing protections, authentication and CSRF protections remain in place.
 This does **not** add an OMV-specific updater. The upstream monitor-only policy is supported: checks and counts stay visible, OS and Docker deployments are blocked, and reboot/backup actions retain their existing protections. Monitor-only can be enabled or removed from the machine menu, matching upstream; configuration-enforced restrictions remain locked. A neutral eye-only label beside the machine name on desktop and mobile shows the policy, and Machine information explains it. Previously saved restrictions remain enforced until explicitly removed.
 
-## Docker stays with your existing manager
+## Docker follows the original provider model
 
-Docker management is off by default in this fork, including for existing configurations:
+Native Docker support is available by default, as in upstream Fleetdeck. OS checks detect the
+Docker executable without accessing registries or pulling images. Newly installed Docker hosts
+then gain a container row and appear in the Containers view. Native results cover Compose stacks
+only; containers created with docker run are outside native coverage.
 
-```yaml
-docker_enabled: false
-```
+Dockhand mappings select Dockhand for those exact hosts and block native checks and deployments
+there. Other hosts use Fleetdeck's native Docker support. Per-machine policies remain available:
+Managed, Monitor only, External manager and Disabled. They are enforced for individual, bulk,
+scheduled, queued and resumed jobs. Failed checks remain unknown rather than healthy zeroes.
 
-With this setting, and without the optional `dockhand` status integration, there is no
-Containers tab, Docker summary or Docker column/menu item.
-Manual and bulk Docker check/deployment requests are rejected by the server. Scheduled image
-checks are skipped even if an old config has `schedule.check_docker: true`. OS checks do not
-perform the new optional Docker capability discovery.
+Native image checks pull images after confirmation; they never restart containers. Stack updates
+remain a separate confirmed action. `schedule.check_docker` is the original upstream opt-in for
+scheduled image checks and defaults to false. In this fork it gates both providers; Dockhand
+additionally requires `dockhand.allow_checks`. Inventory refresh and ordinary polling are read-only.
 
-This does not change the existing dashboard self-detection used to identify its host, or the
-separately enabled command console. It also cannot stop a remote detached operation already
-running when the dashboard restarts: finish existing Docker jobs before switching configuration.
-Disabled Docker deployments are not resumed by the dashboard.
-
-To use the optional Docker view later, explicitly set `docker_enabled: true` in `config.yaml`
-and restart. Then OS checks discover Docker using `command -v docker` without pulling images.
-The separate Containers view shows only known Docker hosts. Per-host settings allow:
-
-- **Managed:** checks and deployments through Fleetdeck.
-- **Monitor only:** image checks allowed, stack deployments blocked.
-- **External manager:** an optional Dockhand/other HTTP(S) link; Fleetdeck Docker jobs blocked.
-- **Disabled:** Fleetdeck Docker jobs blocked for that machine.
-
-These per-host choices are stored in the state database and enforced for individual, bulk,
-scheduled, queued and resumed jobs. Changing settings waits for active Docker jobs to finish.
-Failed stack checks display **unknown / check failed**, not a successful up-to-date status.
-
-**Important:** Fleetdeck's existing image check downloads images (`docker compose pull`);
-it is not a read-only registry lookup. The UI asks for confirmation and says this explicitly.
-Scheduled image checks additionally require `schedule.check_docker: true`. Neither an ordinary
-dashboard refresh nor opening the Containers view pulls images or restarts containers.
+The former fork-only global Docker enable switch has been removed. Remove obsolete entries from
+existing YAML; per-machine policies control restrictions instead. Dockhand mappings remain protected.
 
 ## Try it without connecting to the homelab
 
@@ -548,7 +528,7 @@ Fleetdeck scheduled-container flag, manual-check permission and the configured F
 The values come from authenticated inventory settings and `/api/schedule`; they are never assumed
 from a cached result or a Dockhand execution time. The outcome explains when the flag is on but
 the scheduler is off, provider permission is disabled, or the target is check-only. Native monitor
-policy remains visible. Dockhand-only instructions explicitly retain `docker_enabled: false`.
+policy remains visible. Dockhand instructions explain that exact mappings prevent native fallback.
 
 Collapsed **Options and how to change them** explains three Dockhand choices: use Dockhand’s own
 schedule, additionally request checks on Fleetdeck’s schedule, or enable manual checks. Each
@@ -595,10 +575,10 @@ the menu workflow and focus return. Ruff checks pass. Browser review uses simula
 ### Upstream main compatibility (2026-10-30)
 
 Merged original Fleetdeck main through `81fa17f` (including dashboard PR #139 and screenshots #140).
-The fork retains native Docker opt-out, per-machine Docker policies, optional Dockhand integration,
+The fork retains per-machine Docker policies, optional Dockhand integration,
 All/Machines/Containers scope rows, separate check ages/actions and the offline frontend tests.
-The user's configuration is not modified. Native Docker remains off by default; an optional
-Dockhand mapping never enables native fallback. `schedule.check_docker` continues to gate
+The user's configuration is not modified. Native Docker is available by default, as upstream; an
+optional Dockhand mapping always prevents native fallback on its mapped hosts. `schedule.check_docker` continues to gate
 scheduled checks for both providers; ordinary polling and Refresh inventory remain read-only.
 
 Upstream custom update commands are supported through configuration and the OS machine menu.
@@ -656,3 +636,28 @@ timeouts without retries, queued-policy changes, parent-job blocking, failed dis
 boot confirmation/cancellation. Browser verification used simulated data only at desktop and
 390px: no page overflow, matching 13px status/count text and 16px metric icons, compact options,
 and an information popup anchored to the visible More button. Ruff and diff checks passed.
+
+
+### Original Docker availability and mixed providers
+
+The fork-only global Docker enable flag is removed from the config model, job manager, status API
+and frontend. Native support is available by default as upstream. All/Machines/Containers navigation
+is available without a second enable step. Only discovered/configured container hosts gain container
+rows; ordinary OS checks discover new Docker installations without pulling images. A fresh positive
+capability result overrides an older negative Docker scan for future scheduled checks. Explicit
+container checks still require confirmation for native image downloads. Per-host policies and
+Dockhand mappings remain enforced at submission, execution and resume.
+
+`schedule.check_docker` is retained from upstream, default false: false keeps Fleetdeck's scheduled
+rounds OS-only; true also requests native Compose image checks or mapped Dockhand checks. Dockhand
+still requires allow_checks; its own schedule stays independent. Refresh inventory and dashboard
+polling never request image checks. No user configuration or provider permissions are changed.
+
+
+Verification: all 60 offline frontend tests passed, including discovery after a previously negative
+OS result and provider-specific menu routing without a global flag. Backend checks passed 510 tests
+across the full run and the successful rerun of 9 local-server checks after loopback access was
+restored; 6 skipped and the same 7 known platform checks were deselected. Tests cover newly installed
+Docker without image operations, positive rediscovery over an older negative stack scan, both
+providers' scheduled flag/permission combinations and per-host disabled/monitor/external restrictions.
+Ruff formatting, lint and diff checks passed. No user configuration or live infrastructure changed.

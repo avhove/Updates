@@ -115,7 +115,7 @@ def stopped_inventory():
 
 async def test_start_job_needs_no_guest_executor_and_rechecks_queued_policy():
     inv, target, power = stopped_inventory()
-    jobs = JobManager(inv, docker_enabled=False)
+    jobs = JobManager(inv)
     first = jobs.submit(target.id, "start")
     assert jobs.submit(target.id, "start") is first
     await asyncio.gather(*jobs._tasks)

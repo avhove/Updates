@@ -110,9 +110,12 @@ async def test_schedule_overall_flag_routes_each_provider_without_native_fallbac
     inv.refresh = AsyncMock()
     jobs = JobManager(
         inv,
-        docker_enabled=native_enabled,
         dockhand_targets={"external": "https://dockhand.example", "hidden": "https://dockhand.example"},
     )
+    from fleetdeck.models import DockerSettings
+
+    if not native_enabled:
+        jobs.set_docker_settings("native", DockerSettings(mode="disabled"))
     jobs.hidden.add("hidden")
     called = []
     submit = jobs.submit
@@ -150,9 +153,7 @@ async def test_scheduled_batch_checks_more_than_four_hosts_without_bypassing_cap
     targets = [(_target(f"host-{i}"), FakeExecutor()) for i in range(6)]
     inv = _inventory(*targets)
     inv.refresh = AsyncMock()
-    jobs = JobManager(
-        inv, docker_enabled=False, dockhand_targets={target.id: "https://dockhand.example" for target, _ in targets}
-    )
+    jobs = JobManager(inv, dockhand_targets={target.id: "https://dockhand.example" for target, _ in targets})
     checked = []
     reader = SimpleNamespace(cfg=SimpleNamespace(allow_checks=True), tasks={})
 
@@ -180,7 +181,6 @@ def test_app_wires_scheduled_dockhand_flag_independently_of_native_enable(tmp_pa
 
     cfg = AppConfig(
         allow_no_auth=True,
-        docker_enabled=False,
         dockhand=config(allow_checks=True),
         schedule=ScheduleConfig(check_docker=True),
         state_file=str(tmp_path / "state.db"),
@@ -188,7 +188,7 @@ def test_app_wires_scheduled_dockhand_flag_independently_of_native_enable(tmp_pa
     app = create_app(cfg, _inventory((_target(), FakeExecutor())))
     assert app.state.scheduler.check_docker is True
     assert app.state.scheduler.dockhand is app.state.dockhand
-    assert app.state.jobs.docker_enabled is False
+    assert app.state.jobs.get_docker_settings("t1").mode == "external"
     with TestClient(app) as client:
         assert client.get("/api/schedule").json()["check_docker"] is True
 

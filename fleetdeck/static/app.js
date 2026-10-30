@@ -217,9 +217,9 @@ function csTip(app) {
 }
 
 const dockerSettings = (v) => v.docker_settings || { mode: "managed", manager_name: "Dockhand", manager_url: null };
-const containersVisible = () => !!(state.settings.docker_enabled || state.settings.containers_visible);
-const dockerEnabled = (v) => !!state.settings.docker_enabled && ["managed", "monitor"].includes(dockerSettings(v).mode);
-const hasDocker = (v) => containersVisible() && (!!v.dockhand || (state.settings.docker_enabled && (v.check?.docker_installed === true || (v.stacks && v.stacks.docker !== "none") || dockerSettings(v).mode !== "managed")));
+const containersVisible = () => true;
+const dockerEnabled = (v) => !v.dockhand && ["managed", "monitor"].includes(dockerSettings(v).mode);
+const hasDocker = (v) => !!v.dockhand || v.check?.docker_installed === true || !!(v.stacks && v.stacks.docker !== "none") || dockerSettings(v).mode !== "managed";
 const dockerHosts = () => active().filter(hasDocker).sort((a, b) => a.target.name.localeCompare(b.target.name, undefined, { numeric: true }) || a.target.id.localeCompare(b.target.id));
 const dockerBehind = (v) => dockerEnabled(v) ? (v.stacks?.stacks || []).filter((s) => !s.error && s.update_available && s.state !== "stopped").length : 0;
 const dockerErrors = (v) => !dockerEnabled(v) ? 0 : v.stacks?.error && v.stacks.docker !== "none" ? 1 : (v.stacks?.stacks || []).filter((s) => s.error).length;
@@ -372,7 +372,7 @@ function render() {
   $("#check-containers").disabled = requestingDockhandChecks || (!nativeContainerHosts().length && !active().some(v => v.dockhand && state.settings.dockhand_checks_allowed));
   $("#check-containers").title = "Check containers using each machine's provider. Fleetdeck native checks pull images after confirmation; Dockhand checks registry metadata.";
   $("#refresh span").textContent = "Refresh inventory";
-  $("#check-all").title = state.settings.dockhand_checks_allowed || state.settings.docker_enabled ? "Check OS and container updates using their configured providers; native image pulls require confirmation" : "Check OS updates";
+  $("#check-all").title = state.settings.dockhand_checks_allowed || nativeContainerHosts().length ? "Check OS and container updates using their configured providers; native image pulls require confirmation" : "Check OS updates";
   $("#refresh").title = "Rediscover machines and read saved container reports; no fresh update checks";
   $("#test-notify").hidden = !state.schedule?.notify_targets;
 
@@ -413,7 +413,7 @@ function render() {
       </table></div>
     </div>`;
   }).join("") || (state.view === "containers" && !hosts.length ? `<div class="empty"><h3>No container hosts discovered</h3><p class="muted">Configure a Dockhand mapping or enable native Docker discovery. Refresh inventory reads saved results; it does not start update checks.</p></div>` : state.filter ? `<div class="empty"><h3>No matching machines</h3><p class="muted">Click the selected KPI again to show all machines.</p></div>` : `<div class="empty"><h3>No machines yet</h3><p class="muted">Add a Proxmox node, an Incus server or any Linux host, and it shows up here with its updates, backups and state.</p><a class="button primary" href="/setup">Add machines</a></div>`));
-  const unknown = state.settings.docker_enabled ? active().filter((v) => !v.dockhand && v.target.updatable && v.check?.docker_installed == null && !v.stacks).length : 0;
+  const unknown = active().filter((v) => !v.dockhand && dockerEnabled(v) && v.target.updatable && v.check?.docker_installed == null && !v.stacks).length;
   html("#containers", containersVisible() ? `${hosts.some(v => dockerEnabled(v) && canUpgrade(v.target)) ? `<div class="containers-toolbar"><span class="muted">Native checks download Compose images after confirmation. Dockhand checks registry metadata.</span><button class="small" data-fetch-docker>Fetch image updates</button></div>` : ""}${unknown ? `<p class="muted discovery-note">Docker capability is not known on ${unknown} machine(s). <button class="small" data-discover-docker>Check OS updates to discover hosts</button></p>` : ""}` : "");
   $(".view-tabs").hidden = !containersVisible();
   $("#groups").hidden = false;
