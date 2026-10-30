@@ -1,4 +1,4 @@
-"""Read Dockhand's cached pending records. No registry checks or Docker mutations.
+"""Read cached status and, when opted in, explicitly request registry checks in Dockhand.
 
 An empty pending list is not proof of a successful check. Dockhand does not expose
 successful/failed checks for every container here, so unlisted containers stay unknown.
@@ -17,6 +17,7 @@ from .config import DockhandConfig
 
 
 class ContainerStatus(BaseModel):
+    container_id: str = ""
     name: str
     image: str
     state: str
@@ -32,6 +33,9 @@ class DockhandStatus(BaseModel):
     error: str | None = None
     stale: bool = True
     simulated: bool = False
+    checking: bool = False
+    last_check_at: datetime | None = None
+    check_error: str | None = None
 
 
 def demo_status(url: str) -> DockhandStatus:
@@ -97,6 +101,7 @@ def normalize(containers: object, pending: object) -> list[ContainerStatus]:
             checked = None
         result.append(
             ContainerStatus(
+                container_id=c["id"],
                 name=c["name"][:256],
                 image=str(c.get("image", ""))[:512],
                 state=str(c.get("state", "unknown"))[:40],
@@ -123,6 +128,108 @@ class DockhandReader:
         self.status: dict[str, DockhandStatus] = {}
         self.next_poll = 0.0
         self.lock = asyncio.Lock()
+        self.tasks: dict[str, asyncio.Task] = {}
+        self.last_started: dict[str, float] = {}
+        self.checked: dict[str, dict[str, ContainerStatus]] = {}
+
+    def request_check(self, target_id: str) -> None:
+        if not self.cfg.allow_checks:
+            raise PermissionError("Enable dockhand.allow_checks in Settings to allow explicit Dockhand checks")
+        mapping = next((m for m in self.cfg.environments if m.target_id == target_id), None)
+        if mapping is None:
+            raise KeyError(target_id)
+        if target_id in self.tasks or time.monotonic() - self.last_started.get(target_id, -60) < 30:
+            raise ValueError("A Dockhand check is running or was started recently; wait before retrying")
+        if len(self.tasks) >= 4:
+            raise ValueError("Four Dockhand checks are already running; wait before starting another")
+        previous = self.status.get(target_id, DockhandStatus(manager_url=self.cfg.url))
+        self.status[target_id] = previous.model_copy(update={"checking": True, "check_error": None})
+        self.last_started[target_id] = time.monotonic()
+        self.tasks[target_id] = asyncio.create_task(self._check(target_id, mapping.environment_id))
+
+    def _merge(self, target_id: str, items: list[ContainerStatus]) -> list[ContainerStatus]:
+        known = self.checked.get(target_id, {})
+        for index, item in enumerate(items):
+            old = known.get(item.container_id)
+            if (
+                old
+                and item.status != "excluded"
+                and old.image == item.image
+                and (item.checked_at is None or (old.checked_at is not None and old.checked_at >= item.checked_at))
+            ):
+                items[index] = item.model_copy(update={"status": old.status, "checked_at": old.checked_at})
+        return items
+
+    async def _check(self, target_id: str, environment_id: int) -> None:
+        try:
+            # A fixed JSON endpoint returns the complete per-container result. No deployment endpoints exist here.
+            async with asyncio.timeout(180):
+                containers = await self._get("containers", environment_id)
+                response = await self.client.post(
+                    f"{self.cfg.url}/api/containers/check-updates",
+                    params={"env": environment_id},
+                    headers={"Accept": "application/json"},
+                    timeout=180,
+                )
+                response.raise_for_status()
+                if len(response.content) > 2_000_000:
+                    raise ValueError("Oversized check response")
+                data = response.json()
+                if not isinstance(data, dict) or not isinstance(data.get("results"), list):
+                    raise ValueError("Dockhand did not return complete check results")
+                results = {
+                    r["containerId"]: r
+                    for r in data["results"]
+                    if isinstance(r, dict) and isinstance(r.get("containerId"), str)
+                }
+                items = normalize(containers, {"pendingUpdates": []})
+                now = datetime.now(UTC)
+                for item in items:
+                    row = results.get(item.container_id)
+                    if not row:
+                        continue
+                    if row.get("error"):
+                        item.status = "failed"
+                    elif row.get("updateDisabled") is True or item.status == "excluded":
+                        item.status = "excluded"
+                    elif row.get("isLocalImage") is True:
+                        item.status = "local"
+                    elif row.get("pinnedToDigest") is True:
+                        item.status = "advisory"
+                    elif (row.get("releaseAgeRemainingHours") or 0) > 0:
+                        item.status = "deferred"
+                    elif row.get("hasUpdate") is True:
+                        item.status = "update"
+                    elif row.get("newerVersion"):
+                        item.status = "advisory"
+                    elif row.get("hasUpdate") is False:
+                        item.status = "current"
+                    else:
+                        continue  # incomplete records are never a successful check
+                    item.checked_at = now
+                if items and not any(item.checked_at for item in items):
+                    raise ValueError("No complete check results matched the current container inventory")
+                self.checked[target_id] = {c.container_id: c for c in items if c.checked_at is not None}
+                self.status[target_id] = DockhandStatus(
+                    manager_url=self.cfg.url,
+                    synced_at=now,
+                    stale=False,
+                    last_check_at=now,
+                    containers=items,
+                )
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, TimeoutError):
+            previous = self.status[target_id]
+            self.status[target_id] = previous.model_copy(
+                update={
+                    "checking": False,
+                    "check_error": (
+                        "Dockhand check did not complete. Check connection, token permissions and API version. "
+                        "A timed-out check may still be running in Dockhand; previous results are retained."
+                    ),
+                }
+            )
+        finally:
+            self.tasks.pop(target_id, None)
 
     async def refresh(self) -> None:
         if time.monotonic() < self.next_poll:
@@ -135,6 +242,8 @@ class DockhandReader:
 
             async def read(mapping):
                 async with sem:
+                    if mapping.target_id in self.tasks:
+                        return
                     previous = self.status.get(mapping.target_id, DockhandStatus(manager_url=self.cfg.url))
                     try:
                         containers = await self._get("containers", mapping.environment_id)
@@ -143,11 +252,16 @@ class DockhandReader:
                         if not containers:
                             raise ValueError("Empty inventory cannot establish environment health")
                         items = normalize(containers, pending)
+                        if mapping.target_id in self.tasks:
+                            return
+                        previous = self.status.get(mapping.target_id, previous)
                         self.status[mapping.target_id] = DockhandStatus(
                             manager_url=self.cfg.url,
                             synced_at=datetime.now(UTC),
-                            containers=items,
+                            containers=self._merge(mapping.target_id, items),
                             stale=False,
+                            last_check_at=previous.last_check_at,
+                            check_error=previous.check_error,
                         )
                     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
                         # Never expose response bodies, URLs or exceptions that could contain credentials.
@@ -182,4 +296,9 @@ class DockhandReader:
         return response.json()
 
     async def aclose(self):
+        tasks = list(self.tasks.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         await self.client.aclose()

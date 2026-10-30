@@ -22,7 +22,7 @@ function machine(id, options = {}) {
   };
 }
 
-async function dashboard({ docker = false, containers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
+async function dashboard({ docker = false, containers = false, dockhandChecks = false, targets = [], rememberedView = "machines", schedule = null, mobile = false } = {}) {
   const { window, document } = parseHTML(read("index.html"));
   const calls = [], errors = [], storage = new Map([["dashboardView", JSON.stringify(rememberedView)]]);
   let activeElement = document.body;
@@ -32,7 +32,7 @@ async function dashboard({ docker = false, containers = false, targets = [], rem
   window.HTMLElement.prototype.scrollIntoView = () => {};
   window.HTMLElement.prototype.showModal = function () { this.open = true; };
   window.HTMLElement.prototype.close = function () { this.open = false; };
-  const data = { targets, errors: {}, settings: { docker_enabled: docker, containers_visible: containers, snapshot_before_upgrade: true } };
+  const data = { targets, errors: {}, settings: { docker_enabled: docker, containers_visible: containers, dockhand_checks_allowed: dockhandChecks, snapshot_before_upgrade: true } };
   const mobileQuery = { matches: mobile, addEventListener: (event, callback) => { mobileQuery.onChange = callback; } };
   const sandbox = {
     window, document, URL, innerWidth: 1200, innerHeight: 800,
@@ -47,6 +47,7 @@ async function dashboard({ docker = false, containers = false, targets = [], rem
       else if (path === "/api/jobs") body = [];
       else if (path === "/api/schedule") body = schedule || { check_every: null };
       else if (path === "/api/actions") body = { jobs: [], rejected: {} };
+      else if (path === "/api/dockhand/check") body = { started: true };
       else if (path === "/api/session") body = { login: false };
       else throw new Error(`Unexpected request: ${path}`);
       return { ok: true, json: async () => body };
@@ -642,7 +643,7 @@ test("Dockhand works with native Docker disabled and expands escaped standalone 
     ui.click('[data-open-docker="docker"]');
     const detail = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
     assert.equal(detail.querySelectorAll('.dockhand-table').length, 1);
-    assert.deepEqual([...detail.querySelectorAll('thead th')].map(c => c.textContent), ['Container', 'Stack', 'Image', 'Status', 'Last report']);
+    assert.deepEqual([...detail.querySelectorAll('thead th')].map(c => c.textContent), ['Container', 'Stack', 'Image', 'Status', 'Last checked']);
     assert.deepEqual([...detail.querySelectorAll('td[data-label="Stack"]')].map(c => c.textContent), ['alpha', 'alpha', 'media', 'Standalone', 'Zeta']);
     assert.deepEqual([...detail.querySelectorAll('.dockhand-name')].slice(0, 2).map(c => c.firstChild.textContent), ['alpha-a', 'alpha-b']);
     assert.match(detail.textContent, /check status unknown/);
@@ -687,6 +688,49 @@ test("a failed Dockhand sync shows unknown while retaining last-known results", 
   assert.match(ui.document.querySelector('.container-detail').textContent, /Last-known results.*stale/);
   assert.match(ui.document.querySelector('.container-detail').textContent, /old:latest/);
   assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+});
+
+test("Dockhand checks require opt-in and confirmation, then use only the mapped check endpoint", async () => {
+  const target = machine('dockhand-check', { view: {
+    docker_settings: { mode: 'external', manager_name: 'Dockhand', manager_url: 'https://dockhand.example' },
+    dockhand: { synced_at: now, stale: false, containers: [
+      { name: 'web', image: 'web:latest', state: 'running', stack: null, status: 'unknown' },
+    ] },
+  } });
+  const off = await dashboard({ containers: true, targets: [target] });
+  assert.equal(off.document.querySelector('[data-dockhand-check]').disabled, true);
+  assert.equal(off.calls.some(c => c.path === '/api/dockhand/check'), false);
+  const ui = await dashboard({ containers: true, dockhandChecks: true, targets: [target] });
+  ui.click('[data-open-docker="dockhand-check"]');
+  ui.click('.container-detail [data-dockhand-check]');
+  assert.equal(ui.document.querySelector('#confirm').open, true);
+  assert.match(ui.document.querySelector('#confirm-text').textContent, /not restarted/);
+  assert.equal(ui.calls.some(c => c.path === '/api/dockhand/check'), false);
+  const dialog = ui.document.querySelector('#confirm');
+  dialog.returnValue = 'cancel'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+  assert.equal(ui.calls.some(c => c.path === '/api/dockhand/check'), false);
+  ui.click('.container-detail [data-dockhand-check]');
+  dialog.returnValue = 'ok'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+  const writes = ui.calls.filter(c => c.path === '/api/dockhand/check');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].method, 'POST');
+  assert.deepEqual(JSON.parse(writes[0].body), { target_id: 'dockhand-check' });
+  assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
+  target.dockhand.checking = true;
+  ui.render();
+  assert.equal(ui.document.querySelector('[data-dockhand-check]').disabled, true);
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Checking image updates/);
+  target.dockhand.checking = false;
+  target.dockhand.last_check_at = now;
+  target.dockhand.containers[0].status = 'current';
+  ui.render();
+  assert.match(ui.document.querySelector('[data-open-docker]').textContent, /0/);
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Up to date/);
+  target.dockhand.containers[0].status = 'failed';
+  ui.render();
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Check failed/);
+  assert.match(ui.document.querySelector('[data-open-docker]').textContent, /\?/);
+  assert.deepEqual(ui.errors, []);
 });
 
 

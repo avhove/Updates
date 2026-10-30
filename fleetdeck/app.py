@@ -86,6 +86,10 @@ class DockerSettingsRequest(DockerSettings):
     target_id: str
 
 
+class DockhandCheckRequest(BaseModel):
+    target_id: str = Field(min_length=1, max_length=512)
+
+
 class MonitorOnlyRequest(BaseModel):
     target_ids: list[str] = Field(max_length=1000)
     monitor_only: bool = True
@@ -268,8 +272,47 @@ def create_app(
                 "community_scripts_update": cfg.community_scripts_update,
                 "docker_enabled": cfg.docker_enabled,
                 "containers_visible": bool(cfg.docker_enabled or cfg.dockhand),
+                "dockhand_checks_allowed": bool(cfg.dockhand and cfg.dockhand.allow_checks),
             },
         }
+
+    @app.post("/api/dockhand/check", status_code=202)
+    async def check_dockhand(req: DockhandCheckRequest):
+        if not cfg.dockhand or not cfg.dockhand.allow_checks:
+            raise HTTPException(403, "Enable dockhand.allow_checks in Settings for explicit Dockhand checks")
+        await inventory.refresh()
+        if req.target_id not in inventory.targets or req.target_id not in jobs.dockhand_targets:
+            raise HTTPException(404, "No Dockhand mapping for this machine")
+        if cfg.demo:
+            previous = demo_dockhand[req.target_id]
+            now = datetime.now(UTC)
+            demo_dockhand[req.target_id] = previous.model_copy(
+                update={
+                    "last_check_at": now,
+                    "synced_at": now,
+                    "containers": [
+                        c.model_copy(
+                            update={
+                                "status": "current" if c.status == "unknown" else c.status,
+                                "checked_at": now,
+                            }
+                        )
+                        for c in previous.containers
+                    ],
+                }
+            )
+            return {"started": True, "simulated": True}
+        if dockhand is None:
+            raise HTTPException(409, "Dockhand status integration unavailable")
+        try:
+            dockhand.request_check(req.target_id)
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from None
+        except KeyError:
+            raise HTTPException(404, "No Dockhand mapping for this machine") from None
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
+        return {"started": True}
 
     @app.put("/api/docker-settings")
     async def set_docker_settings(req: DockerSettingsRequest):

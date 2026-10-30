@@ -4,6 +4,7 @@ docker_enabled: true  # Native commands go to the built-in fake executors only.
 schedule:
   check_every: null
 dockhand:
+  allow_checks: true
   url: https://dockhand.example
   token: demo-placeholder-never-sent
   environments:

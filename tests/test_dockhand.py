@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -200,6 +200,13 @@ def test_docker_demo_config_shows_mixed_management_without_any_http_reader(tmp_p
         assert any(c["stack"] == "demo-app" for c in vm["dockhand"]["containers"])
         pi = next(v for v in targets if v["target"]["name"] == "pi4")
         assert pi["docker_settings"]["mode"] == "managed"
+        response = client.post("/api/dockhand/check", json={"target_id": vm["target"]["id"]})
+        assert response.status_code == 202 and response.json()["simulated"] is True
+        checked = next(
+            v for v in client.get("/api/targets").json()["targets"] if v["target"]["id"] == vm["target"]["id"]
+        )
+        assert checked["dockhand"]["last_check_at"]
+        assert any(c["status"] == "current" for c in checked["dockhand"]["containers"])
 
 
 def test_unauthenticated_requests_never_poll_dockhand(tmp_path, monkeypatch):
@@ -222,3 +229,104 @@ async def test_scheduled_os_checks_skip_native_discovery_and_pulls_on_dockhand_m
     await scheduler.run_once()
     assert [job.action for job in jobs.jobs.values()] == ["check"]
     assert all(call.args[0] != DOCKER_DETECT_SCRIPT for call in executor.run.call_args_list)
+
+
+async def test_explicit_check_captures_full_results_and_keeps_them_across_cached_refresh():
+    calls = []
+
+    def respond(req):
+        calls.append(req)
+        if req.url.path == "/api/containers":
+            return httpx.Response(200, json=containers())
+        if req.url.path == "/api/containers/pending-updates":
+            return httpx.Response(200, json={"pendingUpdates": []})
+        assert req.url.path == "/api/containers/check-updates"
+        assert req.method == "POST" and req.headers["accept"] == "application/json"
+        assert req.url.params["env"] == "1"
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {"containerId": "a", "hasUpdate": False},
+                    {"containerId": "b", "hasUpdate": False, "error": "secret-test-token must not leak"},
+                ]
+            },
+        )
+
+    reader = DockhandReader(config(allow_checks=True), transport=httpx.MockTransport(respond))
+    reader.request_check("t1")
+    assert reader.status["t1"].checking
+    with pytest.raises(ValueError, match="running"):
+        reader.request_check("t1")
+    await reader.tasks["t1"]
+    result = reader.status["t1"]
+    assert not result.checking and result.last_check_at
+    by_name = {c.name: c for c in result.containers}
+    assert by_name["web"].status == "current"
+    assert by_name["standalone"].status == "failed"
+    assert all(c.checked_at for c in result.containers)
+    assert "secret-test-token" not in result.model_dump_json()
+    await reader.refresh()
+    assert {c.status for c in reader.status["t1"].containers} == {"current", "failed"}
+    assert reader.status["t1"].last_check_at == result.last_check_at
+    assert sum(req.method == "POST" for req in calls) == 1
+    replacement = containers()
+    replacement[0]["id"] = "replacement-container"
+    merged = reader._merge("t1", normalize(replacement, {"pendingUpdates": []}))
+    assert next(c for c in merged if c.name == "web").status == "unknown"
+    replacement = containers()
+    replacement[0]["labels"]["dockhand.update"] = "false"
+    merged = reader._merge("t1", normalize(replacement, {"pendingUpdates": []}))
+    assert next(c for c in merged if c.name == "web").status == "excluded"
+    await reader.aclose()
+
+
+async def test_manual_check_is_opt_in_and_never_retries_mutations_or_redirects():
+    calls = []
+
+    def respond(req):
+        calls.append(req)
+        if req.method == "GET":
+            return httpx.Response(200, json=containers())
+        return httpx.Response(302, headers={"location": "https://foreign.example"})
+
+    reader = DockhandReader(config(), transport=httpx.MockTransport(respond))
+    with pytest.raises(PermissionError):
+        reader.request_check("t1")
+    assert calls == []
+    reader.cfg.allow_checks = True
+    with pytest.raises(KeyError):
+        reader.request_check("other")
+    reader.request_check("t1")
+    await reader.tasks["t1"]
+    assert reader.status["t1"].check_error
+    assert reader.status["t1"].last_check_at is None
+    assert len(calls) == 2
+    assert all(req.url.host == "dockhand.example" for req in calls)
+    await reader.aclose()
+
+
+def test_manual_check_route_requires_login_csrf_opt_in_and_a_known_mapping(tmp_path, monkeypatch):
+    cfg = AppConfig(
+        auth=AuthConfig(password="test"), dockhand=config(allow_checks=True), state_file=str(tmp_path / "state.db")
+    )
+    app = create_app(cfg, _inventory((_target(), FakeExecutor())))
+    monkeypatch.setattr(app.state.inventory, "refresh", AsyncMock())
+    start = Mock()
+    monkeypatch.setattr(app.state.dockhand, "request_check", start)
+    with TestClient(app) as client:
+        body = {"target_id": "t1"}
+        assert client.post("/api/dockhand/check", json=body).status_code == 401
+        auth = ("admin", "test")
+        assert (
+            client.post(
+                "/api/dockhand/check", json=body, auth=auth, headers={"Origin": "https://foreign.example"}
+            ).status_code
+            == 403
+        )
+        start.assert_not_called()
+        assert client.post("/api/dockhand/check", json={"target_id": "other"}, auth=auth).status_code == 404
+        assert client.post("/api/dockhand/check", json=body, auth=auth).status_code == 202
+        start.assert_called_once_with("t1")
+        cfg.dockhand.allow_checks = False
+        assert client.post("/api/dockhand/check", json=body, auth=auth).status_code == 403

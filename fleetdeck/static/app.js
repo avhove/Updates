@@ -232,7 +232,7 @@ function dockerCell(v) {
   const external = policy.mode === "external", dh = v.dockhand;
   const nativeCount = (r?.stacks || []).filter(s => !s.error).reduce((n, s) => n + s.services.filter(c => c.outdated && ["running", "restarting"].includes(c.status)).length, 0);
   const count = external ? (dh?.containers || []).filter(c => c.status === "update").length : nativeCount;
-  const unknown = external ? !dh || dh.stale || !!dh.error || count === 0 : !r || !!r.error || dockerErrors(v) > 0 || !r.stacks.length;
+  const unknown = external ? !dh || dh.stale || !!dh.error || !!dh.check_error || !dh.containers.length || (!count && dh.containers.some(c => ["unknown", "failed", "local"].includes(c.status))) : !r || !!r.error || dockerErrors(v) > 0 || !r.stacks.length;
   const value = unknown ? "?" : count;
   const manager = external ? `Managed externally by ${policy.manager_name}` : policy.mode === "monitor" ? "Fleetdeck · monitor only" : "Managed by Fleetdeck";
   const description = unknown ? "Container status unknown or incomplete" : `${count} ${plural(count, "container with an image update", "containers with image updates")}`;
@@ -241,12 +241,14 @@ function dockerCell(v) {
 
 function dockhandPanel(v) {
   const dh = v.dockhand, id = esc(v.target.id);
-  const status = { update: "Image update reported", unknown: "No pending update reported · check status unknown", advisory: "Version / pinned digest advisory", deferred: "Update deferred by Dockhand", excluded: "Excluded by policy" };
+  const status = { update: "Image update reported", current: "Up to date", failed: "Check failed", local: "Local image · registry check unavailable", unknown: "No pending update reported · check status unknown", advisory: "Version / pinned digest advisory", deferred: "Update deferred by Dockhand", excluded: "Excluded by policy" };
   const stackName = c => c.stack || "Standalone";
   const compare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   const items = [...dh.containers].sort((a, b) => compare(stackName(a), stackName(b)) || compare(a.name, b.name) || compare(a.image, b.image));
-  const rows = () => `<div class="group-scroll"><table class="dockhand-table" aria-label="${esc(v.target.name)} containers sorted by stack"><colgroup><col class="dh-name"><col class="dh-stack"><col class="dh-image"><col class="dh-status"><col class="dh-report"></colgroup><thead><tr><th>Container</th><th>Stack</th><th>Image</th><th>Status</th><th>Last report</th></tr></thead><tbody>${items.map(c => `<tr><td class="dockhand-name">${esc(c.name)}<div class="cell-detail muted">${esc(c.state)}</div></td><td data-label="Stack" class="muted">${esc(stackName(c))}</td><td data-label="Image">${esc(c.image)}</td><td data-label="Status" class="${c.status === "update" ? "container-tone" : "muted"}">${esc(status[c.status] || status.unknown)}</td><td data-label="Last report" class="muted">${c.checked_at ? ago(c.checked_at) : "Unknown"}</td></tr>`).join("")}</tbody></table></div>`;
-  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("boxes")}${esc(v.target.name)}<span class="host-mode muted">Dockhand · read-only</span>${managerLink(v, "Open Dockhand")}</div><p class="muted">Cached reports from Dockhand · Synced ${dh.synced_at ? ago(dh.synced_at) : "never"}. OS packages are separate.</p>${dh.error ? `<p class="bad">${esc(dh.error)}${dh.synced_at ? " Last-known results follow; status is stale." : ""}</p>` : ""}<p class="docker-check-note muted">A missing pending record does not establish a successful check. Open Dockhand for full check results, standalone updates and manager self-updates.</p>${items.length ? rows() : '<p class="muted">Container status unavailable.</p>'}</section>`;
+  const rows = () => `<div class="group-scroll"><table class="dockhand-table" aria-label="${esc(v.target.name)} containers sorted by stack"><colgroup><col class="dh-name"><col class="dh-stack"><col class="dh-image"><col class="dh-status"><col class="dh-report"></colgroup><thead><tr><th>Container</th><th>Stack</th><th>Image</th><th>Status</th><th>Last checked</th></tr></thead><tbody>${items.map(c => `<tr><td class="dockhand-name">${esc(c.name)}<div class="cell-detail muted">${esc(c.state)}</div></td><td data-label="Stack" class="muted">${esc(stackName(c))}</td><td data-label="Image">${esc(c.image)}</td><td data-label="Status" class="${c.status === "update" ? "container-tone" : c.status === "current" ? "ok" : c.status === "failed" ? "bad" : "muted"}">${esc(status[c.status] || status.unknown)}</td><td data-label="Last checked" class="muted">${c.checked_at ? ago(c.checked_at) : "Unknown"}</td></tr>`).join("")}</tbody></table></div>`;
+  const failed = items.filter(c => c.status === "failed").length;
+  const checkButton = `<button class="small" data-dockhand-check="${id}" ${!state.settings.dockhand_checks_allowed || dh.checking ? "disabled" : ""} title="${state.settings.dockhand_checks_allowed ? "Check image updates in Dockhand; no containers are restarted" : "Enable dockhand.allow_checks in Settings to allow explicit checks"}">${icon("refresh")}${dh.checking ? "Checking…" : "Check in Dockhand"}</button>`;
+  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("boxes")}${esc(v.target.name)}<span class="host-mode muted">Dockhand · ${state.settings.dockhand_checks_allowed ? "manual checks" : "read-only"}</span>${checkButton}${managerLink(v, "Open Dockhand")}</div><p class="muted">Synced ${dh.synced_at ? ago(dh.synced_at) : "never"} · Last check via Fleetdeck: ${dh.last_check_at ? ago(dh.last_check_at) : "never"}. Container deployments stay in Dockhand.</p>${dh.checking ? '<p role="status" aria-live="polite">Checking image updates in Dockhand… Containers continue running.</p>' : ""}${dh.check_error ? `<p class="bad" role="status">${esc(dh.check_error)}</p>` : dh.last_check_at ? `<p class="${failed ? "bad" : "muted"}" role="status">Check completed${failed ? ` · ${failed} ${plural(failed, "container check failed", "container checks failed")}` : ""}.</p>` : ""}${dh.error ? `<p class="bad">${esc(dh.error)}${dh.synced_at ? " Last-known results follow; status is stale." : ""}</p>` : ""}<p class="docker-check-note muted">Successful manual checks establish image status. Cached pending records alone cannot confirm that an image is up to date.</p>${items.length ? rows() : '<p class="muted">Container status unavailable.</p>'}</section>`;
 }
 
 function stackPanel(v) {
@@ -637,6 +639,11 @@ async function act(action, ids, { rebootIfRequired = false, snapshotFirst = fals
 }
 
 const CONFIRM = {
+  dockhand: {
+    title: "Check containers in Dockhand?",
+    text: "Ask Dockhand to check all containers in this machine's mapped environment against their registries. Container images are not deployed and containers are not restarted. Results will appear here.",
+    ok: "Start check",
+  },
   upgrade: {
     title: "Update these machines?",
     text: "Runs a full OS upgrade (apt dist-upgrade, dnf upgrade, apk upgrade or pacman -Syu).",
@@ -703,7 +710,7 @@ function confirmAction(action, ids) {
         phased ? `<span class="confirm-update-type phased">${icon("clock")}<span>${phased} phased, waiting</span></span>` : "",
       ].filter(Boolean).join("");
     }
-    if (action === "backup" || action === "stacks") detail = "";
+    if (action === "backup" || action === "stacks" || action === "dockhand") detail = "";
     if (action === "reboot") {
       detail = v?.check?.reboot_required ? "reboot needed" : "";
       const t = v?.target;
@@ -737,6 +744,14 @@ function confirmAction(action, ids) {
   dlg.showModal();
   dlg.addEventListener("close", async () => {
     if (dlg.returnValue !== "ok") return;
+    if (action === "dockhand") {
+      try {
+        await api("/api/dockhand/check", { method: "POST", body: JSON.stringify({ target_id: ids[0] }) });
+        await load();
+        schedule(1000);
+      } catch (e) { alert(`Could not start Dockhand check: ${e.message}`); }
+      return;
+    }
     if (action === "upgrade") state.selected.clear();
     const upgrade = action === "upgrade";
     let destination = null;
@@ -842,13 +857,14 @@ document.addEventListener("click", (e) => {
 
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#dashboard-menu") || e.target.closest(".dashboard-menu-items button,.dashboard-menu-items a")) $("#dashboard-menu").open = false;
-  const el = e.target.closest("[data-machine-menu],[data-machine-info],[data-open-docker],[data-docker-settings],[data-view],[data-fetch-docker],[data-discover-docker]");
+  const el = e.target.closest("[data-machine-menu],[data-machine-info],[data-open-docker],[data-docker-settings],[data-view],[data-fetch-docker],[data-discover-docker],[data-dockhand-check]");
   if (el?.dataset.machineMenu) { openMachineMenu(el.dataset.machineMenu, el); return; }
   if (el?.dataset.machineInfo) { openMachineInformation(el.dataset.machineInfo, el); return; }
   if (!e.target.closest("#machine-actions")) closeMachineMenu();
   if (!e.target.closest("#machine-information")) closeMachineInformation();
   if (!el || el.disabled) return;
-  if (el.dataset.view) setView(el.dataset.view);
+  if (el.dataset.dockhandCheck) confirmAction("dockhand", [el.dataset.dockhandCheck]);
+  else if (el.dataset.view) setView(el.dataset.view);
   else if (el.dataset.openDocker) {
     const id = el.dataset.openDocker;
     state.containerExpanded.has(id) ? state.containerExpanded.delete(id) : state.containerExpanded.add(id);
@@ -934,7 +950,7 @@ async function tick() {
     console.error(e);
   } finally {
     // Always keep polling, even if one request failed (e.g. a job evicted from history).
-    const busy = state.jobs.some((j) => j.status === "running" || j.status === "queued");
+    const busy = state.jobs.some((j) => j.status === "running" || j.status === "queued") || state.targets.some(v => v.dockhand?.checking);
     schedule(busy ? 1500 : 15000);
   }
 }

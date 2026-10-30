@@ -22,6 +22,7 @@ dockhand:
   url: https://dockhand.example
   token: ${FLEETDECK_DOCKHAND_TOKEN}
   poll_seconds: 300
+  allow_checks: false
   environments:
     - target_id: your-exact-fleetdeck-target-id
       environment_id: 1
@@ -36,10 +37,45 @@ The token is not returned in the dashboard status API. Configuration remains acc
 the existing authenticated Settings editor, so protect access to that page as before.
 
 Dockhand integration is opt-in and polls only while the dashboard requests inventory, at most
-once per interval per process. Its only remote calls are `GET /api/containers?env=ID` and
-`GET /api/containers/pending-updates?env=ID`. It never triggers checks, pulls, deployments,
+once per interval per process. Automatic polling uses only `GET /api/containers?env=ID` and
+`GET /api/containers/pending-updates?env=ID`. It never automatically triggers checks, pulls, deployments,
 pruning or restarts. It reads both Compose labels and standalone containers. **Open Dockhand**
 opens the configured manager URL; deployment and self-update stay with that manager.
+
+### Explicit Dockhand image checks
+
+Set `dockhand.allow_checks: true` and apply/restart to enable **Check in Dockhand**. Keep
+`docker_enabled: false` when using Dockhand only. The check button opens a confirmation naming
+the mapped machine. Only after confirmation does the authenticated, CSRF-protected
+`POST /api/dockhand/check` endpoint start a check for that exact configured environment.
+Browser input cannot supply a manager URL, environment ID or arbitrary API path.
+
+The sole outgoing write is `POST /api/containers/check-updates?env=ID`, with
+`Accept: application/json` to capture Dockhand's full per-container result. This checks registry
+images; it does not deploy images, recreate containers, prune, restart or change native Docker
+policy. Each request runs in the background with a three-minute bound. The UI shows **Checking…**
+while the complete result is pending; no artificial progress counts are displayed. Checks are
+limited to one per environment, four globally, and at least thirty seconds between starts.
+They are never automatically retried, scheduled, or resumed after a Fleetdeck restart.
+
+Successful `hasUpdate: false` results can establish **Up to date**, with a check timestamp.
+Failures, local-only images, exclusions, advisories and cooldowns remain distinct. Source error
+bodies are not exposed. Captured results survive cached polling in memory only while container
+ID and image still match; newer pending reports take precedence. Whole-check failures retain
+previous data with a visible error. A timeout or Fleetdeck restart does not cancel an operation
+already running in Dockhand; check Dockhand before trying again. On restart, missing successful
+check history returns to unknown until another explicit check.
+
+The supplied mixed-management demo enables this opt-in but simulates the entire check in memory.
+It never sends a Dockhand request. Existing configured integrations remain cached-status-only
+unless the user explicitly enables `allow_checks`.
+
+Verification of explicit checks: 131 focused backend tests passed (one existing skip and
+one Linux boot-ID test deselected), and all 30 offline UI tests passed. These cover opt-in,
+authentication/CSRF, mapping restrictions, duplicate starts, complete/partial results,
+redirect refusal, cached reconciliation, confirmation/cancellation and simulated demo checks.
+No live Dockhand environment was contacted. Checking state is tested offline; rendered browser
+appearance still needs visual review.
 
 The pending endpoint is not a complete successful-check history. A missing pending record,
 an unsupported older API response or an empty environment inventory must not become **Up to date**.

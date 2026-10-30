@@ -52,6 +52,7 @@ docker_enabled: false
 #   url: https://dockhand.example
 #   token: ${FLEETDECK_DOCKHAND_TOKEN}
 #   poll_seconds: 300
+#   allow_checks: false  # true enables the explicit Check in Dockhand button; no auto-checks
 #   environments:
 #     - target_id: ssh:docker-host
 #       environment_id: 1
