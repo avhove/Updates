@@ -544,6 +544,9 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .machine-table.has-backup.has-containers { min-width: 1420px; }
 .dashboard-page .machine-table col.col-select { width: 36px; }
 .dashboard-page .machine-table col.col-machine { width: auto; }
+/* With a spanning scope header, fixed-table layout cannot infer the one auto column
+   reliably. Give it an explicit share so names never collapse into the backup column. */
+.dashboard-page .machine-table.has-containers col.col-machine { width: 300px; }
 .dashboard-page .machine-table col.col-backup { width: 120px; }
 .dashboard-page .machine-table col.col-backup-job { width: 44px; }
 .dashboard-page .machine-table col.col-metric { width: 70px; }

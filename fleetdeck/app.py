@@ -233,6 +233,16 @@ def create_app(
         await inventory.refresh(force=refresh)
         if dockhand is not None:
             await dockhand.refresh()
+        errors = dict(inventory.errors)
+        if cfg.dockhand:
+            missing = [m for m in cfg.dockhand.environments if m.target_id not in inventory.targets]
+            if missing:
+                errors["Dockhand mapping"] = (
+                    "No matching Fleetdeck machine for "
+                    + ", ".join(f"environment {m.environment_id}: {m.target_id}" for m in missing)
+                    + ". Use the exact target.id from /api/targets in dockhand.environments; "
+                    "display names do not match."
+                )
         views = [
             TargetView(
                 target=t,
@@ -250,7 +260,7 @@ def create_app(
         ]
         return {
             "targets": views,
-            "errors": inventory.errors,
+            "errors": errors,
             "backup_places": jobs.backup_places,
             "backup_folder": str(backup_folder) if backup_folder else None,
             "settings": {

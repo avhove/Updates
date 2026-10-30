@@ -149,11 +149,23 @@ class DockhandReader:
                             containers=items,
                             stale=False,
                         )
-                    except (httpx.HTTPError, ValueError, TypeError, KeyError):
+                    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
                         # Never expose response bodies, URLs or exceptions that could contain credentials.
+                        reason = "Dockhand status unavailable; check connection, permissions and API version."
+                        if isinstance(exc, httpx.HTTPStatusError):
+                            code = exc.response.status_code
+                            reason = {
+                                401: "Dockhand rejected authentication (HTTP 401). Check the Fleetdeck token.",
+                                403: "Dockhand denied access (HTTP 403). Check token permissions for this environment.",
+                                404: "Dockhand returned HTTP 404. Check its base URL, environment ID and API version.",
+                            }.get(code, f"Dockhand returned HTTP {code}. Redirects are not followed.")
+                        elif isinstance(exc, httpx.TimeoutException):
+                            reason = "Dockhand connection timed out. Check reachability from the Fleetdeck container."
+                        elif isinstance(exc, httpx.RequestError):
+                            reason = "Could not connect to Dockhand. Check DNS, network access and its TLS certificate."
                         self.status[mapping.target_id] = previous.model_copy(
                             update={
-                                "error": "Dockhand status unavailable; check connection, permissions and API version.",
+                                "error": reason,
                                 "stale": True,
                             }
                         )

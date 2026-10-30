@@ -174,6 +174,16 @@ def test_demo_never_creates_external_reader(tmp_path):
     assert app.state.dockhand is None
 
 
+def test_unmatched_mapping_is_visible_instead_of_silently_showing_zero_hosts(tmp_path):
+    cfg = AppConfig(demo=True, dockhand=config(), state_file=str(tmp_path / "state.db"))
+    with TestClient(create_app(cfg)) as client:
+        data = client.get("/api/targets").json()
+        assert "Dockhand mapping" in data["errors"]
+        assert "environment 1: t1" in data["errors"]["Dockhand mapping"]
+        assert "exact target.id" in data["errors"]["Dockhand mapping"]
+        assert "secret-test-token" not in str(data)
+
+
 def test_docker_demo_config_shows_mixed_management_without_any_http_reader(tmp_path):
     from fleetdeck.config import load_config
 
