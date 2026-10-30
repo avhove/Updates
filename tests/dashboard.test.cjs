@@ -71,7 +71,12 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
     el.dispatchEvent(new window.Event("click", { bubbles: true }));
     return el;
   };
-  return { ...sandbox.ui, document, window, calls, errors, click, data, setMobile(value) { mobileQuery.matches = value; mobileQuery.onChange?.(); } };
+  const informationTrigger = id => {
+    const panel = document.querySelector('#machine-actions');
+    if (panel.hidden || !panel.querySelector(`[data-machine-info="${id}"]`)) click(`[data-machine-menu="${id}"]`);
+    return panel.querySelector(`[data-machine-info="${id}"]`);
+  };
+  return { ...sandbox.ui, document, window, calls, errors, click, informationTrigger, data, setMobile(value) { mobileQuery.matches = value; mobileQuery.onChange?.(); } };
 }
 
 test("mobile cards preserve package details, information and confirmation without bulk selection", async () => {
@@ -87,8 +92,8 @@ test("mobile cards preserve package details, information and confirmation withou
   assert.equal(doc.querySelectorAll('.mc-card').length, 2);
   assert.equal(doc.querySelectorAll('[data-select]').length, 0);
   assert.equal(doc.querySelector('[data-machine-row="web"] .mc-status-group .mc-check-time').textContent, "Checked just now");
-  assert.ok(doc.querySelector('[data-machine-row="web"] .mc-check-line [data-machine-info]'));
-  assert.ok(doc.querySelector('[data-machine-row="pve"] .mc-check-line [data-machine-info]'));
+  assert.equal(doc.querySelector('[data-machine-row="web"] [data-machine-info]'), null);
+  assert.equal(doc.querySelector('[data-machine-row="pve"] [data-machine-info]'), null);
   assert.equal(doc.querySelector('[data-machine-row="pve"] .mc-footer'), null, "healthy cards do not reserve an empty action footer");
   assert.equal(doc.querySelectorAll('[data-machine-row="pve"] [data-machine-menu]').length, 1);
   assert.ok(doc.querySelector('[data-machine-row="pve"] .mc-utility-row [data-machine-menu]'));
@@ -98,7 +103,7 @@ test("mobile cards preserve package details, information and confirmation withou
   ui.click('[data-machine-row="web"] [data-toggle]');
   assert.match(doc.querySelector('#packages-web').textContent, /openssl/);
   assert.equal(ui.calls.some(call => call.path === '/api/actions'), false);
-  ui.click('[data-machine-row="web"] [data-machine-info]');
+  ui.informationTrigger('web'); ui.click('[data-machine-info="web"]');
   assert.match(doc.querySelector('#machine-information').textContent, /Covered by a backup job/);
   ui.click('[data-machine-row="web"] [data-act="upgrade"]');
   assert.equal(doc.querySelector('#confirm').open, true);
@@ -313,7 +318,7 @@ test("last-known results stay visible without stale update or reboot actions", a
   ui.click('[data-machine-row="failed"] .update-metric.security');
   assert.match(doc.querySelector("#packages-failed").textContent, /Last known · 3 h ago/);
   assert.equal(doc.querySelector("#packages-failed script"), null);
-  ui.click('[data-machine-info="failed"]');
+  ui.informationTrigger('failed'); ui.click('[data-machine-info=\"failed\"]');
   assert.match(doc.querySelector("#machine-information").textContent, /agent <script>unavailable/);
   assert.equal(doc.querySelector("#machine-information script"), null);
   assert.match(doc.querySelector("#summary").textContent, /2Machines needing OS recheck/);
@@ -515,17 +520,17 @@ test("machine backup context uses neutral information popovers", async () => {
   const css = read("style.css");
   assert.match(css, /\.backup-job \{ width: 28px; min-height: 28px; justify-content: center; \}/);
   assert.match(css, /\.backup-job-heading, \.dashboard-page \.backup-job-cell \{ padding-inline: 5px; text-align: center; \}/);
-  assert.ok(standalone.querySelector(".machine-info-controls .repo-note"));
+  assert.ok(ui.informationTrigger('standalone').querySelector('.repo-note'));
   assert.equal(node.querySelector(".repo-note"), null);
   assert.equal(node.querySelector(".last-check").querySelector(".ui-icon"), null);
-  assert.ok(node.querySelector(".machine-info-controls .machine-info-trigger"));
+  assert.equal(node.querySelector('[data-machine-info]'), null);
 
-  const trigger = node.querySelector('[data-machine-info="pve"]');
+  const trigger = ui.informationTrigger('pve');
   assert.ok(trigger);
   assert.equal(trigger.classList.contains("warn"), false);
   assert.equal(trigger.classList.contains("bad"), false);
   assert.equal(trigger.hasAttribute("title"), false);
-  ui.click('[data-machine-info="pve"]');
+  ui.informationTrigger('pve'); ui.click('[data-machine-info=\"pve\"]');
 
   const panel = doc.querySelector("#machine-information");
   assert.equal(panel.hidden, false);
@@ -538,29 +543,29 @@ test("machine backup context uses neutral information popovers", async () => {
 
   doc.dispatchEvent(Object.assign(new ui.window.Event("keydown"), { key: "Escape" }));
   assert.equal(panel.hidden, true);
-  assert.ok(doc.activeElement === trigger, "Escape returns focus to the information button");
+  assert.ok(doc.activeElement === node.querySelector("[data-machine-menu]"), "Escape returns focus to the visible More button");
   assert.equal(trigger.getAttribute("aria-expanded"), "false");
 
-  const guestTrigger = guest.querySelector('[data-machine-info="guest"]');
+  const guestTrigger = ui.informationTrigger('guest');
   assert.ok(guestTrigger);
-  ui.click('[data-machine-info="guest"]');
+  ui.informationTrigger('guest'); ui.click('[data-machine-info=\"guest\"]');
   assert.equal(panel.querySelector("#machine-information-title").textContent, "Machine information");
   assert.deepEqual([...panel.querySelectorAll("h3")].map((el) => el.textContent), ["Updates", "Backup"]);
   assert.match(panel.textContent, /Some storage details need attention/);
   assert.match(panel.textContent, /2 backups found/);
   assert.match(panel.textContent, /Covered by a backup job/);
 
-  const unscheduledTrigger = unscheduled.querySelector('[data-machine-info="unscheduled"]');
+  const unscheduledTrigger = ui.informationTrigger('unscheduled');
   assert.ok(unscheduledTrigger);
-  ui.click('[data-machine-info="unscheduled"]');
+  ui.informationTrigger('unscheduled'); ui.click('[data-machine-info=\"unscheduled\"]');
   assert.match(panel.textContent, /No matching backup job/);
   assert.match(panel.textContent, /No backup job covers this machine/);
 
-  const standaloneTrigger = standalone.querySelector('[data-machine-info="standalone"]');
+  const standaloneTrigger = ui.informationTrigger('standalone');
   assert.ok(standaloneTrigger);
-  ui.click('[data-machine-info="standalone"]');
+  ui.informationTrigger('standalone'); ui.click('[data-machine-info=\"standalone\"]');
   assert.equal(panel.querySelector("#machine-information-title").textContent, "Machine information");
-  assert.deepEqual([...panel.querySelectorAll("h3")].map((el) => el.textContent), ["Updates", "Backup"]);
+  assert.deepEqual([...panel.querySelectorAll("h3")].map((el) => el.textContent), ["Updates", "Backup", "Repositories"]);
   assert.match(panel.textContent, /Configure a host backup first/);
   assert.deepEqual(ui.errors, []);
 });
@@ -650,7 +655,7 @@ test("Dockhand works with native Docker disabled and expands escaped standalone 
     assert.deepEqual([...detail.querySelectorAll('thead th')].map(c => c.textContent), ['Container', 'Stack', 'Image', 'Status', 'Last checked']);
     assert.deepEqual([...detail.querySelectorAll('td[data-label="Stack"]')].map(c => c.textContent), ['alpha', 'alpha', 'media', 'Standalone', 'Zeta']);
     assert.deepEqual([...detail.querySelectorAll('.dockhand-name')].slice(0, 2).map(c => c.firstChild.textContent), ['alpha-a', 'alpha-b']);
-    assert.match(detail.textContent, /No confirmed check result/);
+    assert.match(detail.textContent, /Check result unavailable/);
     assert.equal(detail.querySelector('script'), null);
     assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
     ui.click('[data-open-docker="docker"]');
@@ -750,7 +755,7 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
     assert.ok(badge);
     assert.equal(badge.previousElementSibling.className, "machine-name");
     assert.equal(badge.textContent.trim(), "");
-    ui.click('[data-machine-info="appliance"]');
+    ui.informationTrigger('appliance'); ui.click('[data-machine-info=\"appliance\"]');
     assert.match(ui.document.querySelector('#machine-information').textContent, /Update policy is managed in configuration/);
     assert.equal(row.querySelector('[data-act="upgrade"]'), null);
     assert.ok(row.querySelector('[data-act="reboot"]'));
@@ -967,7 +972,7 @@ test("compound container indicators preserve updates, version advisories, covera
     assert.equal(panel.querySelectorAll('.container-results-table tbody tr').length, 3);
     assert.match(panel.textContent, /no registry comparison/);
     assert.match(panel.textContent, /Excluded by policy/);
-    assert.match(panel.textContent, /No confirmed check result/);
+    assert.match(panel.textContent, /Check result unavailable/);
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
   }
 });
@@ -1163,7 +1168,7 @@ test("All, Machines and Containers share layout while rendering only their own s
     assert.equal(doc.querySelector('#bulk-toolbar').hidden, true);
     assert.equal(ui.state.selected.size, 0);
     assert.deepEqual([...doc.querySelectorAll('[data-machine-row]')].map(r => r.dataset.machineRow), ['apps']);
-    assert.ok(doc.querySelector('[data-machine-info="apps"]'));
+    assert.ok(ui.informationTrigger('apps'));
     if (!mobile) assert.equal(doc.querySelector('.machine-cell').hasAttribute('rowspan'), false);
     ui.click('#view-all');
     assert.equal(doc.querySelectorAll(os).length, 2);
@@ -1239,4 +1244,61 @@ test("native container guidance describes pulls and host policies without Dockha
     assert.equal(panel.querySelector('[data-stack]'), null);
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
   }
+});
+
+test("update metrics keep four stable slots and the top legend follows the selected scope", async () => {
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ containers: true, mobile, targets: [
+      machine('security', { check: { packages: [{ name: 'ssl', security: true, available: '2' }] } }),
+      machine('packages', { check: { packages: [{ name: 'curl', available: '2' }] } }),
+      machine('phased', { check: { packages: [{ name: 'app', phased: true, available: '2' }] } }),
+      machine('reboot', { check: { reboot_required: true } }),
+      machine('docker', { view: { dockhand: { stale: false, containers: [{ name: 'web', status: 'update' }] } } }),
+    ] });
+    const doc = ui.document;
+    for (const [id, index] of [['security',0],['packages',1],['phased',2],['reboot',3]]) {
+      const metrics = doc.querySelector(`[data-machine-row="${id}"] .os-metrics`);
+      assert.equal(metrics.children.length, 4);
+      assert.equal(metrics.children[index].classList.contains('metric-slot-empty'), false);
+      assert.equal(metrics.querySelectorAll('.metric-slot-empty').length, 3);
+    }
+    const metrics = doc.querySelector('.container-indicators');
+    assert.equal(metrics.children.length,4);
+    assert.equal(metrics.children[0].dataset.containerFilter,'all');
+    assert.equal(metrics.children[1].dataset.metricSlot,'review');
+    assert.equal(metrics.children[2].dataset.metricSlot,'coverage');
+    assert.equal(metrics.children[3].dataset.metricSlot,'failures');
+    assert.equal(doc.querySelector('#view-containers').textContent, 'Containers');
+    assert.match(doc.querySelector('#updates-legend').textContent,/OS.*Security.*Packages.*Phased.*Reboot.*Containers.*Image updates.*Review.*Coverage gaps.*Failed checks/);
+    ui.click('#view-containers');
+    assert.equal(doc.querySelector('#updates-legend').querySelectorAll('.updates-legend-group').length,1);
+    assert.equal(doc.querySelector('#updates-legend strong').textContent,'Containers');
+    ui.click('#view-machines');
+    assert.equal(doc.querySelector('#updates-legend strong').textContent,'OS');
+    assert.equal(ui.calls.some(c=>c.method==='POST'),false);
+  }
+});
+
+test("runtime dots precede escaped container names independently of update-check results", async () => {
+  const ui = await dashboard({ containers:true, targets:[machine('docker',{view:{dockhand:{stale:false,containers:[
+    {name:'web<script>unsafe</script>',image:'web:1',state:'running',status:'unknown'},
+    {name:'worker',image:'worker:1',state:'running',status:'failed'},
+    {name:'paused',image:'app:1',state:'paused',status:'current'},
+    {name:'stopped',image:'app:1',state:'exited',status:'current'},
+  ]}}})] });
+  ui.click('[data-open-docker="docker"]');
+  const panel=ui.document.querySelector('.container-detail');
+  const rows=[...panel.querySelectorAll('.container-results-table tbody tr')];
+  const web=rows.find(r=>r.querySelector('.container-name-line').textContent.startsWith('web'));
+  assert.ok(web.querySelector('.container-name-line').firstElementChild.classList.contains('running'));
+  assert.match(web.textContent,/Check result unavailable/);
+  assert.doesNotMatch(web.textContent,/new, unchecked or replaced/);
+  assert.match(web.querySelector('.container-result span').getAttribute('title'),/Request a fresh check/);
+  assert.equal(panel.querySelector('script'),null);
+  const worker=rows.find(r=>r.querySelector('.container-name-line').textContent==='worker');
+  assert.ok(worker.querySelector('.container-runtime-dot.running'));
+  assert.match(worker.textContent,/Check failed/);
+  assert.ok(panel.querySelector('.container-runtime-dot.paused'));
+  assert.ok(panel.querySelector('.container-runtime-dot.stopped'));
+  assert.equal(ui.calls.some(c=>c.method==='POST'),false);
 });

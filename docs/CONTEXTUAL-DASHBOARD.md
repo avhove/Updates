@@ -10,8 +10,7 @@ The dashboard supports three views with one consistent table:
 
 Machine identity, selection and optional backup context span both rows in All. The machine's
 second line contains only its OS; type and policy badges stay beside its name. A single header
-reads Machine, Scope, Status, Updates, Checked, Backup (when available), Actions. Info remains
-available beside the machine identity. A container row has its own manager symbol, status,
+reads Machine, Scope, Status, Updates, Checked, Backup (when available), Actions. **Machine information** is available in each per-machine **…** menu. A container row has its own manager symbol, status,
 independent update/review/coverage/failure metrics, check ages and provider-specific action.
 The **Update** button keeps its name and appears exclusively on the OS row. Native Docker uses
 **View stacks**, with the existing confirmed **Update stack** action inside details; external
@@ -244,8 +243,8 @@ and failed/partial attempts are labelled. Empty data never borrows the inventory
 requested-check time. Synced remains inside container details. Disabled/external-without-reader
 providers retain explicit policy labels rather than invented successful check times.
 
-Desktop columns have content budgets (selection 30, identity 230, scope 108, status 164, metrics
-150, checked 112, optional backup 98, actions 164 px), distributed across the table width.
+Desktop columns have content budgets (selection 30, identity 230, scope 90, status 164, metrics
+188, checked 112, optional backup 98, actions 144 px), distributed across the table width.
 Machine names and badges retain full accessible/hover labels. Cards start below 1120 px;
 checked results, update counts and per-scope actions wrap without page overflow. Horizontal
 boundaries separate machines, lighter boundaries separate OS/container rows, and vertical
@@ -324,7 +323,7 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
 - Nonzero Security, Package and Phased metrics and the reboot indicator share the OS Updates
   cell. Metrics and the OS status control open package details. Container metrics open the
   same provider-neutral details used in the Containers view. Existing status colors remain:
-  OS updates purple, container updates blue, reboot gold, confirmed current green, failures red.
+  OS and container updates purple, review items amber, reboot gold, confirmed current green, failures red.
   Missing and stale results remain explicit; opening a control never submits an operation.
 - Dashboard and machine menus share item spacing, text, icon sizing and hover treatment.
   Machines and Settings include an icon on the Dashboard button, Back up & restore, and Test
@@ -364,7 +363,7 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   information could not be read; Info explains which. Proxmox node configuration-backup cells stay blank.
   A job may exist even when Last backup is a dash. Ages use hours, days and weeks without changing job coverage.
   Exact dates, storage, counts, verification, job coverage and backup notes live in one neutral
-  information popover beside the machine identity; Proxmox nodes also include repository context there.
+  information popover opened from **Machine information** in the **…** menu; repository notes remain available there.
 - Selecting machines reveals the bulk-update bar. Updates and reboots retain their confirmation dialogs.
   The update dialog has a compact machine summary and aligned options. Snapshot first and Reboot
   if required both start unchecked every time; users explicitly opt in for each operation. This
@@ -383,7 +382,7 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   remain shared context. Existing confirmations and provider action guards are preserved.
   Mobile cards have no selection controls; bulk selection remains available on desktop. Switching
   to mobile clears desktop selection so hidden bulk operations cannot remain pending. The toolbar
-  places the controls on a separate row below the logo, shared across Dashboard, Machines and Settings. Icon controls are 44 px squares with even gaps; menus stay inside the viewport. Info aligns with the right edge of the card. KPIs use two columns with extra inset for their numbers. Expanded package details retain a local
+  places the controls on a separate row below the logo, shared across Dashboard, Machines and Settings. Icon controls are 44 px squares with even gaps; menus stay inside the viewport. Machine information is available through the card’s **…** menus. KPIs use two columns with extra inset for their numbers. Expanded package details retain a local
   horizontal scroller. Menus and confirmation dialogs stay within the mobile viewport.
   Layout switching and interactions were checked in the local browser with simulated machines at
   320, 390 and 430 px widths, and the desktop table at 1200 px. Native iPhone Safari still needs
@@ -562,3 +561,32 @@ explanations. No check endpoints, schedules, configuration or deployment behavio
 All 50 offline UI tests and Ruff checks pass. Added cases cover live settings updates, scheduling
 off, blocked permission, enabled scheduled checks, native monitor/check-only policies and both
 mobile and desktop details without starting any action.
+
+### Fixed metric slots, compact legend and machine information
+
+Each Updates cell reserves four positions. OS uses Security, Packages, Phased and Reboot;
+containers use Images, Review, Coverage and Failures. Missing metrics reserve noninteractive
+empty slots rather than moving other values or inventing zeroes. Unknown image counts stay
+unavailable. Coverage uses a dashed-circle symbol, distinct from machine information.
+A compact Updates-only legend appears above the tables and follows All/Machines/Containers.
+The Containers tab no longer shows the count of hosts.
+
+OS and container update availability now share purple. Routine container metrics have no filled
+background; security, failure and reboot indicators retain emphasis. Review is amber and coverage
+neutral. Whole machine groups highlight together, including shared identity and backup cells.
+Individual controls keep their hover/focus treatment and existing action scopes.
+
+Machine information moved out of identity/check-time areas into both per-machine menus. It
+opens the same escaped information panel with OS results, policy, backups and repository context.
+The popup anchors before the menu closes, and Escape returns focus to the visible More button.
+Non-Proxmox repository notes retain a small warning on More and inside Machine information.
+
+Container runtime dots sit immediately before names: running green, paused/restarting amber,
+dead red, stopped/unknown neutral. They describe runtime state independently of image-check
+outcomes. Unmatched update results read **Check result unavailable**, with the matching explanation
+and suggested next step in a tooltip. Provider, monitoring, deployment and scheduler guards are
+unchanged; the user’s native Docker setting remains untouched.
+
+All 52 offline UI tests pass. New checks cover fixed slots, scoped legends, both providers, runtime
+versus update states, escaped names and short unknown-result copy; existing popup tests now exercise
+the menu workflow and focus return. Ruff checks pass. Browser review uses simulated machines only.

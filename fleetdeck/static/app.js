@@ -28,6 +28,7 @@ const ICON = {
   backupJob: '<path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 11V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/><path d="M3 10h18"/><circle cx="17" cy="17" r="5"/><path d="M17 14v3l2 1"/>',
   noBackup: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+  coverage: '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/>',
   tag: '<path d="M20 13 13 20a2 2 0 0 1-3 0L2 12V2h10l8 8a2 2 0 0 1 0 3Z"/><path d="M7 7h.01"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/>',
   alert: '<path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
@@ -195,8 +196,15 @@ function backupJobCell(t) {
 }
 
 function machineInfoButton(t, c) {
-  const id = esc(t.id);
-  return `<button class="small ghost machine-info-trigger" data-machine-info="${id}" data-focus-key="machine-info:${id}" aria-label="Information for ${esc(t.name)}" aria-controls="machine-information" aria-expanded="false">${icon("info")}</button>`;
+  const notes = !isProxmox(t) ? c?.notes || [] : [];
+  return `<button data-machine-info="${esc(t.id)}" data-focus-key="machine-information:${esc(t.id)}" aria-controls="machine-information" aria-expanded="false">${icon("info")}Machine information${notes.length ? `<span class="repo-note warn" title="${esc(notes.join("\n"))}" aria-label="Repository information">${icon("alert")}</span>` : ""}</button>`;
+}
+
+function updatesLegend() {
+  const item = (symbol, label, tone = "", tip = "") => `<span class="updates-legend-item"${tip ? ` title="${esc(tip)}"` : ""}><span class="${tone}">${icon(symbol)}</span>${label}</span>`;
+  const os = state.view !== "containers" ? `<div class="updates-legend-group"><strong>OS</strong>${item("shield", "Security", "bad")}${item("package", "Packages")}${item("clock", "Phased")}${item("reboot", "Reboot", "reboot-tone")}</div>` : "";
+  const containers = containersVisible() && state.view !== "machines" ? `<div class="updates-legend-group"><strong>Containers</strong>${item("boxes", "Image updates", "container-tone")}${item("tag", "Review", "container-review-tone", "New version tags, pinned digests or held updates")}${item("coverage", "Coverage gaps", "muted", "Local, excluded or unmatched containers; native checks cover Compose only")}${item("alert", "Failed checks", "bad")}</div>` : "";
+  return os + containers;
 }
 
 function csTip(app) {
@@ -231,7 +239,8 @@ function osCheckTime(v) {
 }
 
 function rowMenu(v, scope = "machine") {
-  return `<button class="small ghost more-actions" data-machine-menu="${esc(v.target.id)}" data-menu-scope="${scope}" data-focus-key="menu:${esc(v.target.id)}:${scope}" aria-label="${scope === "containers" ? "Container" : "More"} actions for ${esc(v.target.name)}" aria-controls="machine-actions" aria-expanded="false">⋯</button>`;
+  const notes = !isProxmox(v.target) && v.check?.notes?.length;
+  return `<button class="small ghost more-actions" data-machine-menu="${esc(v.target.id)}" data-menu-scope="${scope}" data-focus-key="menu:${esc(v.target.id)}:${scope}" aria-label="${scope === "containers" ? "Container" : "More"} actions for ${esc(v.target.name)}${notes ? "; repository notes available" : ""}"${notes ? ' title="Repository notes are available in Machine information"' : ""} aria-controls="machine-actions" aria-expanded="false">⋯${notes ? '<span class="menu-warning-dot" role="img" aria-label="Repository notes available"></span>' : ""}</button>`;
 }
 
 function rowHtml(v, withBackup, relation = {}, mobile = false) {
@@ -243,10 +252,6 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     ? ` <span class="chip" title="${esc(csTip(c.community_script))}">helper script</span>` : "";
   const note = t.updatable && t.note
     ? ` <span class="machine-note warn" title="${esc(t.note)}" aria-label="${esc(t.note)}">${icon("alert")}</span>` : "";
-  const repoNote = !isProxmox(t) && c?.notes?.length
-    ? `<span class="repo-note ${c.notes.length > 1 ? "warn" : "muted"}" title="${esc(c.notes.join("\n"))}" aria-label="Repository information">${icon("alert")}</span>` : "";
-  const machineInfo = machineInfoButton(t, c);
-  const information = `${machineInfo}${repoNote}`;
   const rebootTitle = t.no_reboot || v.blocked || "Reboot needed";
   const reboot = !needsRecheck(v) && c?.reboot_required === true
     ? `<span class="reboot-status required" role="img" aria-label="Reboot required" title="${esc(rebootTitle)}">${icon("reboot")}</span>` : "";
@@ -260,16 +265,18 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
   const showOs = state.view !== "containers", hasContainers = hasDocker(v) && state.view !== "machines";
   const span = showOs && hasContainers ? ' rowspan="2"' : "";
   const metrics = [["security", securityPackages(shown).length], ["package", regularPackages(shown).length], ["phased", phasedPackages(shown).length]]
-    .filter(([, count]) => count > 0).map(([kind, count]) => metricButton(v, kind, count)).join("");
+    .map(([kind, count]) => count ? metricButton(v, kind, count) : `<span class="metric-slot-empty" data-metric-slot="${kind}" aria-hidden="true"></span>`).join("");
+  const hasMetrics = actionablePackages(shown).length > 0 || phasedPackages(shown).length > 0;
+  const rebootSlot = reboot || '<span class="metric-slot-empty" data-metric-slot="reboot" aria-hidden="true"></span>';
   const osStatus = shown?.packages?.length ? `<button class="os-status-hit" data-toggle="${esc(t.id)}" data-focus-key="os-status:${esc(t.id)}" aria-expanded="${state.expanded.has(t.id)}" aria-controls="packages-${esc(t.id)}" aria-label="OS status for ${esc(t.name)}; view package details">${updateState(v)}</button>` : updateState(v);
   const identityCells = `<td class="selection-cell"${span}>${showOs ? `<label class="machine-select"><input type="checkbox" aria-label="Select ${esc(t.name)} for OS updates" title="Select for OS package updates only" data-select="${esc(t.id)}" data-focus-key="select:${esc(t.id)}" ${state.selected.has(t.id) ? "checked" : ""} ${selectable(v) && !relation.context ? "" : "disabled"}><span class="mobile-select-label">Select</span></label>` : ""}</td>
-    <td class="name machine-cell" data-label="Machine"${span}><div class="machine-cell-inner"><span class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-identity"><span class="machine-name" title="${esc(t.name)}">${esc(t.name)}</span>${monitor}<span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}</span><span class="machine-meta">${shown?.os ? `<span class="machine-os" title="${esc(shown.os)}">${esc(compactOS(shown.os))}</span>` : ""}</span></span><span class="machine-info-controls">${information}</span></div></td>`;
+    <td class="name machine-cell" data-label="Machine"${span}><div class="machine-cell-inner"><span class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-identity"><span class="machine-name" title="${esc(t.name)}">${esc(t.name)}</span>${monitor}<span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}</span><span class="machine-meta">${shown?.os ? `<span class="machine-os" title="${esc(shown.os)}">${esc(compactOS(shown.os))}</span>` : ""}</span></span></div></td>`;
   const sharedBackup = withBackup ? `<td class="backup-cell section-start" data-label="Backup"${span}><div class="scope-backup">${backupCell(t)}<span class="backup-job-cell">${backupJobCell(t)}</span></div></td>` : "";
   let html = showOs ? `<tr class="${rowClasses.join(" ")} scope-os" data-machine-row="${esc(t.id)}" aria-label="${esc(t.name)} operating system">
     ${identityCells}
     <td class="scope-cell section-start" data-label="Scope">OS</td>
     <td class="update-status-cell" data-label="OS status">${osStatus}</td>
-    <td class="update-metric-cell scope-metrics" data-label="Updates"><div class="os-metrics">${metrics}${reboot}${!metrics && !reboot ? '<span class="muted">—</span>' : ""}</div></td>
+    <td class="update-metric-cell scope-metrics" data-label="Updates"><div class="os-metrics">${metrics}${rebootSlot}</div></td>
     <td class="last-check" data-label="OS checked">${osCheckTime(v)}</td>
     ${sharedBackup}
     <td class="update-action-cell section-start" data-label="OS actions"><div class="scope-actions"><span class="primary-action">${relation.context ? "" : nextAction(v)}</span>${rowMenu(v)}</div></td>
@@ -289,10 +296,10 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     const action = relation.context ? "" : nextAction(v);
     const more = rowMenu(v);
     html = `<article class="mc-card${relation.context ? " is-context" : ""}${v.hidden ? " is-hidden" : ""}" data-machine-row="${esc(t.id)}">
-      <div class="mc-header"><div class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-name">${esc(t.name)}</span>${monitor}<span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}${!showOs ? information : ""}</div></div>
+      <div class="mc-header"><div class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-name">${esc(t.name)}</span>${monitor}<span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}</div></div>
       ${os ? `<div class="mc-meta-row"><div class="machine-meta"><span class="machine-os" title="${esc(os)}">${esc(compactOS(os))}</span></div></div>` : ""}
-      ${showOs ? `<section class="mc-os-scope" aria-label="${esc(t.name)} operating system"><div class="mc-scope-title">Operating system</div><div class="mc-status-group">${osStatus}<div class="mc-check-line"><span class="mc-check-time">${c?.error ? "Attempt" : "Checked"} ${c ? ago(c.checked_at) : "Never"}</span>${information}</div></div>
-      ${metrics || reboot ? `<div class="mc-counts">${metrics}${reboot ? `<span class="mc-reboot">${reboot}</span>` : ""}</div>` : ""}
+      ${showOs ? `<section class="mc-os-scope" aria-label="${esc(t.name)} operating system"><div class="mc-scope-title">Operating system</div><div class="mc-status-group">${osStatus}<div class="mc-check-line"><span class="mc-check-time">${c?.error ? "Attempt" : "Checked"} ${c ? ago(c.checked_at) : "Never"}</span></div></div>
+      ${hasMetrics || reboot ? `<div class="mc-counts os-metrics">${metrics}${reboot ? `<span class="mc-reboot">${reboot}</span>` : rebootSlot}</div>` : ""}
       ${action ? `<div class="mc-footer"><div class="mc-action">${action}</div>${more}</div>` : `<div class="mc-utility-row">${more}</div>`}</section>` : ""}
       ${hasContainers ? `<section class="mc-containers" aria-label="${esc(t.name)} containers"><div class="mc-scope-title">${containerScope(v)}</div><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button><div class="mc-container-check muted">${containerCheckTime(v, true)}</div>${dockerCell(v, false)}<div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></section>` : ""}
       ${backup ? `<div class="mc-details"><div class="mc-detail-line"><span>Backup</span><div class="mc-backup-value">${backup}${backupJobCell(t)}</div></div></div>` : ""}
@@ -404,7 +411,7 @@ function render() {
   $(".view-tabs").hidden = !containersVisible();
   $("#groups").hidden = false;
   $("#containers").hidden = state.view !== "containers";
-  $("#docker-host-count").textContent = hosts.length;
+  html("#updates-legend", updatesLegend());
   document.querySelectorAll("[data-view]").forEach(el => el.setAttribute("aria-pressed", String(el.dataset.view === state.view)));
 
   const btn = $("#update-selected");
@@ -473,6 +480,7 @@ function openMachineMenu(id, trigger) {
     (hasDocker(v) && !v.dockhand ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
     (!containerOnly && state.console?.enabled && !["stopped", "offline"].includes(t.status) ? `<button data-run="${esc(id)}">${icon("terminal")}Run command</button>` : "") +
     (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("boxes")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
+  menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
   machineMenuId = id;
   machineMenuFocus = trigger.dataset.focusKey;
   trigger.setAttribute("aria-expanded", "true");
@@ -483,16 +491,17 @@ function openMachineMenu(id, trigger) {
   menu.querySelector("button:not(:disabled)")?.focus();
 }
 
-let machineInfoId = null;
+let machineInfoId = null, machineInfoFocus = null;
 function closeMachineInformation(restoreFocus = false) {
   const panel = $("#machine-information");
   panel.hidden = true;
   if (machineInfoId) {
     const trigger = [...document.querySelectorAll("[data-machine-info]")].find((el) => el.dataset.machineInfo === machineInfoId);
     trigger?.setAttribute("aria-expanded", "false");
-    if (restoreFocus) trigger?.focus();
+    if (restoreFocus) [...document.querySelectorAll("[data-machine-menu]")].find(el => el.dataset.focusKey === machineInfoFocus)?.focus();
   }
   machineInfoId = null;
+  machineInfoFocus = null;
 }
 
 function machineInfoSection(title, lines) {
@@ -522,6 +531,8 @@ function backupInformation(t) {
 }
 
 function openMachineInformation(id, trigger) {
+  const rect = trigger.getBoundingClientRect();
+  const returnFocus = machineMenuFocus;
   const open = machineInfoId === id;
   closeMachineInformation();
   closeMachineMenu();
@@ -529,7 +540,7 @@ function openMachineInformation(id, trigger) {
   const v = state.targets.find((item) => item.target.id === id);
   if (!v) return;
   const backup = backupInformation(v.target);
-  const repositories = isProxmox(v.target) ? v.check?.notes || [] : [];
+  const repositories = v.check?.notes || [];
   const updates = [];
   if (v.monitor_only) {
     updates.push("Monitor only: updates are installed outside Fleetdeck. Checks, reboots and backups remain available.");
@@ -549,9 +560,9 @@ function openMachineInformation(id, trigger) {
   const panel = $("#machine-information");
   panel.innerHTML = `<div class="machine-info-heading"><span>${icon("info")}<strong id="machine-information-title">${isProxmoxNode(v.target) ? "Node" : "Machine"} information</strong></span><span class="muted">${esc(v.target.name)}</span></div>${machineInfoSection("Updates", updates)}${machineInfoSection("Backup", backup)}${machineInfoSection("Repositories", repositories)}`;
   machineInfoId = id;
+  machineInfoFocus = returnFocus;
   trigger.setAttribute("aria-expanded", "true");
   panel.hidden = false;
-  const rect = trigger.getBoundingClientRect();
   panel.style.left = `${Math.max(8, Math.min(rect.right - panel.offsetWidth, innerWidth - panel.offsetWidth - 8))}px`;
   panel.style.top = `${Math.max(8, rect.bottom + panel.offsetHeight < innerHeight ? rect.bottom + 6 : rect.top - panel.offsetHeight - 6)}px`;
   panel.focus();

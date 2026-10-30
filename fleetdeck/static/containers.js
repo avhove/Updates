@@ -95,26 +95,24 @@ function containerScope(v) {
 
 function dockerCell(v, withManager = true) {
   if (!hasDocker(v)) return "";
+  const empty = filter => `<span class="metric-slot-empty" data-metric-slot="${filter}" aria-hidden="true"></span>`;
   const policy = dockerSettings(v);
-  if (policy.mode === "disabled") return '<span class="muted">disabled</span>';
-  if (!v.dockhand && !dockerEnabled(v)) return `<button class="container-metric-hit" data-open-docker="${esc(v.target.id)}" aria-label="Container status managed externally; view details">${icon("boxes")}—</button>`;
+  if (policy.mode === "disabled") return `<span class="container-indicators">${["all", "review", "coverage", "failures"].map(empty).join("")}</span>`;
+  if (!v.dockhand && !dockerEnabled(v)) return `<span class="container-indicators"><button class="container-metric-hit" data-container-filter="all" data-open-docker="${esc(v.target.id)}" aria-label="Container status managed externally; view details">${icon("boxes")}—</button>${["review", "coverage", "failures"].map(empty).join("")}</span>`;
   const s = containerSummary(v), id = esc(v.target.id), selected = state.containerFilters?.[v.target.id] || "all";
   const manager = s.provider === "dockhand" ? "Managed externally by Dockhand" : "Managed by Fleetdeck native Docker";
   const badge = (filter, symbol, value, label, tone) => `<button class="container-metric-hit container-indicator ${tone || ""}" data-open-docker="${id}" data-container-filter="${filter}" data-focus-key="docker:${id}:${filter}:${symbol}" aria-expanded="${state.containerExpanded.has(v.target.id) && selected === filter}" title="${esc(label)}" aria-label="${esc(`${label}. ${manager}. View container details`)}"><span class="update-metric ${tone || ""}">${symbol === "spin" ? '<span class="spin"></span>' : icon(symbol)}${value === null ? "" : `<span>${value}</span>`}</span></button>`;
   const label = s.usable ? `${s.updates} ${plural(s.updates, "container with an image update", "containers with image updates")}${s.stale ? " · last-known results" : ""}` : "Container update count unavailable";
   let body = badge("all", "boxes", s.value, label, `container${s.stale ? " last-known" : ""}${s.unknown ? " unknown" : ""}`);
-  if (s.reviews) body += badge("review", "tag", s.reviews, `${s.reviews} containers with version / pinned-digest advisories or held updates`, "container-review");
-  if (s.coverage || s.scopeGap) body += badge("coverage", "info", s.coverage || null,
-    s.scopeGap ? "Compose-only coverage: standalone containers and newer-version tags are outside Fleetdeck native checks" : `${s.coverage} coverage ${plural(s.coverage, "exception", "exceptions")}: local, excluded, new or unmatched containers`, "container-coverage");
-  if (s.failures) body += badge("failures", "alert", s.failures, `${s.failures} ${plural(s.failures, "latest container or stack check failed", "latest container or stack checks failed")}; known updates are retained`, "container-failure");
-  if (s.checking) body += badge("all", "spin", null, "Checking containers; previous results are shown until the check completes", "container-notice");
-  else if (s.error || s.checkError) body += badge("all", s.usable ? "clock" : "alert", null, "Container checks or connection unavailable; results may be last-known", "container-notice");
-  else if (s.historyError || (s.scheduledStatus === "failed")) body += badge("all", "alert", null, "Scheduled-check history has a warning; confirmed results remain visible", "container-notice");
+  body += s.reviews ? badge("review", "tag", s.reviews, `${s.reviews} containers with version / pinned-digest advisories or held updates`, "container-review") : empty("review");
+  body += s.coverage || s.scopeGap ? badge("coverage", "coverage", s.coverage || null,
+    s.scopeGap ? "Compose-only coverage: standalone containers and newer-version tags are outside Fleetdeck native checks" : `${s.coverage} coverage ${plural(s.coverage, "exception", "exceptions")}: local, excluded, new or unmatched containers`, "container-coverage") : empty("coverage");
+  body += s.failures ? badge("failures", "alert", s.failures, `${s.failures} ${plural(s.failures, "latest container or stack check failed", "latest container or stack checks failed")}; known updates are retained`, "container-failure") : empty("failures");
   return `<span class="container-indicators">${body}${withManager ? `<span class="container-manager-symbol" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(s.provider === "dockhand" ? "external" : "server")}</span>` : ""}</span>`;
 }
 
 function containerResult(row) {
-  const f = containerFacts(row), lines = [], add = (tone, symbol, text) => lines.push(`<div class="container-result ${tone}">${icon(symbol)}<span>${esc(text)}</span></div>`);
+  const f = containerFacts(row), lines = [], add = (tone, symbol, text, tip = "") => lines.push(`<div class="container-result ${tone}">${icon(symbol)}<span${tip ? ` title="${esc(tip)}"` : ""}>${esc(text)}</span></div>`);
   if (f.update) add("container-tone", "boxes", `Image update reported${f.failure || row.status === "unknown" ? ` · last known${row.reported_at ? ` ${ago(row.reported_at)}` : ""}` : ""}`);
   if (f.current) add("ok", "check", row.newer_version ? "Current tag is up to date" : "Up to date");
   const oldReview = f.failure && row.advisory_at && row.checked_at && Date.parse(row.advisory_at) < Date.parse(row.checked_at);
@@ -125,7 +123,7 @@ function containerResult(row) {
   if (f.failure) add("bad", "alert", ({ rate_limit: "Check failed · registry rate limit", authentication: "Check failed · registry authentication", timeout: "Check failed · registry timeout", stack: "Stack image check failed" })[row.check_issue] || "Check failed · registry unavailable");
   if (row.status === "local") add("muted", "server", "Local image · no registry comparison available");
   if (row.status === "excluded") add("muted", "info", row.coverage_reason || "Excluded by policy");
-  if (row.status === "unknown") add("muted", "info", row.check_issue === "missing_result" ? "No matching result in the latest check" : "No confirmed check result · new, unchecked or replaced container");
+  if (row.status === "unknown") add("muted", "info", "Check result unavailable", "Fleetdeck has no result it can reliably match to this container. Request a fresh check; if it remains unavailable, inspect the result in your container manager.");
   return lines.join("") || '<span class="muted">No confirmed check result</span>';
 }
 
@@ -152,6 +150,13 @@ function containerCheckGuidance(v, s) {
   return `${settings}${schedule}<details class="container-help"><summary>Options and how to change them</summary>${options}<p><strong>How to set it.</strong> Open <a href="/settings">Settings</a>, edit the existing values, save, then apply/restart Fleetdeck. Set <code>schedule.check_every</code> to your desired interval if scheduling is off.${native ? " Host policies are available through this panel’s Settings button." : " Keep the Dockhand URL, token and environment mappings. For a Dockhand-only setup, keep <code>docker_enabled: false</code>."}</p><p>Unavailable machines and running or recently requested checks may be skipped. The machine’s <strong>Update</strong> button installs OS packages only.</p><p><strong>Reading the results.</strong> Synced means Fleetdeck fetched the reports. Last checked is each container’s result or labelled failed attempt. Unknown means no reliable result is available. Local images have no registry counterpart to compare. A container can have both an image update and a version advisory, so counts may overlap. ${persistence}</p></details>`;
 }
 
+function containerName(row) {
+  const value = String(row.state || "unknown"), stateName = value.toLowerCase();
+  const tone = stateName === "running" ? "running" : ["restarting", "paused"].includes(stateName) ? "paused" : stateName === "dead" ? "dead" : "stopped";
+  const dot = row.nativeStack && !row.container_id ? "" : `<span class="container-runtime-dot ${tone}" role="img" aria-label="${esc(`Container ${value}`)}" title="${esc(value)}"></span>`;
+  return `<div class="container-name-line">${dot}<span>${esc(row.name)}</span></div><div class="cell-detail muted">${esc(value)}</div>`;
+}
+
 function containerPanel(v) {
   const s = containerSummary(v), id = esc(v.target.id), dh = v.dockhand, native = s.provider === "native";
   const filter = state.containerFilters?.[v.target.id] || "all", compare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -174,7 +179,7 @@ function containerPanel(v) {
     const allowed = !v.monitor_only && canUpgrade(v.target) && !v.blocked && !v.active_job && !stack.error && stack.state !== "stopped" && v.stacks?.compose !== "none";
     return `<button class="small primary" data-stack="${esc(stack.name)}" data-id="${id}" ${allowed ? "" : "disabled"} title="${esc(v.monitor_only ? MONITOR_TIP : v.blocked || stack.error || "Download images and recreate running services")}">Update stack</button>`;
   };
-  const table = `<div class="group-scroll"><table class="container-results-table ${native ? "native-container-table" : "dockhand-table"}" aria-label="${esc(v.target.name)} containers sorted by stack"><colgroup><col class="cr-name"><col class="cr-stack"><col class="cr-image"><col class="cr-status"><col class="cr-checked">${actions ? '<col class="cr-action">' : ""}</colgroup><thead><tr><th>${native ? "Service" : "Container"}</th><th>Stack</th><th>Image</th><th>Status</th><th>Last checked</th>${actions ? '<th>Action</th>' : ""}</tr></thead><tbody>${shown.map(row => `<tr><td class="container-name${native ? "" : " dockhand-name"}">${esc(row.name)}<div class="cell-detail muted">${esc(row.state)}</div></td><td data-label="Stack" class="muted">${esc(row.stack || "Standalone")}</td><td data-label="Image">${esc(row.image)}</td><td data-label="Status">${containerResult(row)}</td><td data-label="Last checked" class="muted" title="${esc(({ dockhand_schedule: "From Dockhand scheduled-check history", fleetdeck_button: "From a check requested through Fleetdeck", fleetdeck_schedule: "From a scheduled Fleetdeck check", fleetdeck_native: "From Fleetdeck native Compose checks" })[row.source] || "From Dockhand pending-update reports")}">${row.status === "excluded" ? "Excluded" : row.status === "local" ? "Not applicable" : row.checked_at ? `${containerFacts(row).failure || row.check_issue === "missing_result" ? "Attempt: " : ""}${ago(row.checked_at)}` : "Not checked"}</td>${actions ? `<td data-label="Action">${action(row)}</td>` : ""}</tr>`).join("")}</tbody></table></div>`;
+  const table = `<div class="group-scroll"><table class="container-results-table ${native ? "native-container-table" : "dockhand-table"}" aria-label="${esc(v.target.name)} containers sorted by stack"><colgroup><col class="cr-name"><col class="cr-stack"><col class="cr-image"><col class="cr-status"><col class="cr-checked">${actions ? '<col class="cr-action">' : ""}</colgroup><thead><tr><th>${native ? "Service" : "Container"}</th><th>Stack</th><th>Image</th><th>Status</th><th>Last checked</th>${actions ? '<th>Action</th>' : ""}</tr></thead><tbody>${shown.map(row => `<tr><td class="container-name${native ? "" : " dockhand-name"}">${containerName(row)}</td><td data-label="Stack" class="muted">${esc(row.stack || "Standalone")}</td><td data-label="Image">${esc(row.image)}</td><td data-label="Status">${containerResult(row)}</td><td data-label="Last checked" class="muted" title="${esc(({ dockhand_schedule: "From Dockhand scheduled-check history", fleetdeck_button: "From a check requested through Fleetdeck", fleetdeck_schedule: "From a scheduled Fleetdeck check", fleetdeck_native: "From Fleetdeck native Compose checks" })[row.source] || "From Dockhand pending-update reports")}">${row.status === "excluded" ? "Excluded" : row.status === "local" ? "Not applicable" : row.checked_at ? `${containerFacts(row).failure || row.check_issue === "missing_result" ? "Attempt: " : ""}${ago(row.checked_at)}` : "Not checked"}</td>${actions ? `<td data-label="Action">${action(row)}</td>` : ""}</tr>`).join("")}</tbody></table></div>`;
   const notices = [s.checking ? '<p class="container-notice-line" role="status">Checking container images… Previous results remain last-known until completion.</p>' : "", s.error ? `<p class="container-notice-line bad" role="status">${esc(s.error)} Last-known results are shown where available.</p>` : "", s.checkError ? `<p class="container-notice-line bad" role="status">${esc(s.checkError)}</p>` : "", s.historyError ? `<p class="container-notice-line warn">${esc(s.historyError)} Confirmed manual results remain usable.</p>` : ""].join("");
   const guidance = containerCheckGuidance(v, s);
   const categoryNote = filter === "coverage" && !native ? '<p class="container-notice-line muted">Local images have no registry counterpart, so repeating a check cannot compare them. Policy exclusions are intentional; new or replaced containers need a fresh matching result.</p>' : filter === "review" ? '<p class="container-notice-line muted">New version tags and pinned digests require manual review. Held image updates wait for their cooldown. These items are separate from applicable image updates.</p>' : "";
