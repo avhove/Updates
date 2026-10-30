@@ -32,7 +32,7 @@ function containerView(v) {
       status: "failed", state: "Stack check unavailable", check_issue: "stack", checked_at: r.checked_at, source: "fleetdeck_native", nativeStack: stack });
   }
   return { provider: "native", rows, scopeGap: true, checking: ["stacks", "stack-update"].includes(v.active_job?.action),
-    stale: !!r?.error, error: r?.error, checkedAt: r?.checked_at, syncedAt: r?.checked_at };
+    stale: !!r?.error || (!v.target.updatable && !!r), error: r?.error, checkedAt: r?.checked_at, syncedAt: r?.checked_at };
 }
 
 function containerSummary(v) {
@@ -43,7 +43,57 @@ function containerSummary(v) {
     current: count("current"), usable: useful, unknown: !useful, value: useful ? count("update") : "—" };
 }
 
-function dockerCell(v) {
+function containerStatus(v) {
+  const policy = dockerSettings(v), s = containerSummary(v);
+  let symbol = "help", label = "Not checked", tone = "muted";
+  if (policy.mode === "disabled") label = "Disabled";
+  else if (!v.dockhand && !dockerEnabled(v)) { symbol = "external"; label = "Managed externally"; }
+  else if (s.checking) return '<span class="status-inline muted"><span class="spin"></span>Checking containers…</span>';
+  else if (s.error || s.checkError) { symbol = "alert"; label = "Check unavailable"; tone = "bad"; }
+  else if (s.stale && s.rows.length) { symbol = "clock"; label = "Last-known results"; }
+  else if (s.failures) { symbol = "alert"; label = s.usable ? "Partial results" : "Check failed"; tone = s.usable ? "warn" : "bad"; }
+  else if (s.historyError || s.scheduledStatus === "failed") { symbol = "alert"; label = "History warning"; tone = "warn"; }
+  else if (s.updates) { symbol = "boxes"; label = "Updates available"; tone = "container-tone"; }
+  else if (s.reviews) { symbol = "tag"; label = "Review needed"; tone = "container-review-tone"; }
+  else if (s.coverage) { symbol = "info"; label = "Coverage exceptions"; }
+  else if (s.current) { symbol = "check"; label = s.provider === "native" ? "Compose up to date" : "Up to date"; tone = "ok"; }
+  return `<span class="status-inline ${tone}">${icon(symbol)}${label}</span>`;
+}
+
+function containerCheckTime(v, withLabel = false) {
+  const policy = dockerSettings(v), s = containerSummary(v);
+  if (policy.mode === "disabled") return '<span class="muted">Disabled</span>';
+  if (!v.dockhand && !dockerEnabled(v)) return '<span class="muted">External manager</span>';
+  const relevant = s.rows.filter(r => !["local", "excluded"].includes(r.status));
+  const dated = relevant.filter(r => r.checked_at && Number.isFinite(Date.parse(r.checked_at)));
+  const times = dated.map(r => Date.parse(r.checked_at));
+  if (!times.length) {
+    if (s.provider === "native" && s.checkedAt && s.error) return `<span title="Latest native container check attempt">${withLabel ? "Attempt " : ""}${ago(s.checkedAt)}<span class="cell-detail">Latest attempt</span></span>`;
+    return `<span>${s.rows.length && !relevant.length ? "Not applicable" : "Not checked"}</span>`;
+  }
+  const newest = new Date(Math.max(...times)).toISOString(), oldest = new Date(Math.min(...times)).toISOString();
+  const age = ago(newest) === ago(oldest) ? ago(newest) : `${ago(newest)} – ${ago(oldest)}`;
+  const attempts = dated.filter(r => containerFacts(r).failure || r.check_issue === "missing_result").length;
+  const unchecked = relevant.length - dated.length;
+  const notes = [attempts ? attempts === dated.length ? "Latest attempts" : `${attempts} ${plural(attempts, "attempt", "attempts")}` : "", unchecked ? `${unchecked} unchecked` : "", s.stale ? "Last known" : ""].filter(Boolean);
+  const title = `Container results and attempts, not inventory sync. Newest: ${window.FleetdeckDates.dateTime(newest)}. Oldest: ${window.FleetdeckDates.dateTime(oldest)}.${notes.length ? ` ${notes.join("; ")}.` : ""}`;
+  return `<span title="${esc(title)}">${withLabel ? "Checked " : ""}${esc(age)}${notes.length ? `<span class="cell-detail">${esc(notes.join(" · "))}</span>` : ""}</span>`;
+}
+
+function containerRowAction(v) {
+  const policy = dockerSettings(v);
+  if (policy.mode === "disabled") return "";
+  if (v.dockhand || policy.mode === "external") return managerLink(v, `Open ${policy.manager_name || "manager"}`);
+  return `<button class="small" data-open-docker="${esc(v.target.id)}" data-container-filter="all" data-focus-key="container-details:${esc(v.target.id)}" aria-expanded="${state.containerExpanded.has(v.target.id)}">View stacks</button>`;
+}
+
+function containerScope(v) {
+  const policy = dockerSettings(v), external = !!v.dockhand || policy.mode === "external";
+  const manager = policy.mode === "disabled" ? "Container checks disabled" : external ? `Managed externally by ${policy.manager_name || "manager"}` : "Fleetdeck native Docker · Compose only";
+  return `Containers<span class="scope-provider" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(external ? "external" : "server")}</span>`;
+}
+
+function dockerCell(v, withManager = true) {
   if (!hasDocker(v)) return "";
   const policy = dockerSettings(v);
   if (policy.mode === "disabled") return '<span class="muted">disabled</span>';
@@ -60,7 +110,7 @@ function dockerCell(v) {
   if (s.checking) body += badge("all", "spin", null, "Checking containers; previous results are shown until the check completes", "container-notice");
   else if (s.error || s.checkError) body += badge("all", s.usable ? "clock" : "alert", null, "Container checks or connection unavailable; results may be last-known", "container-notice");
   else if (s.historyError || (s.scheduledStatus === "failed")) body += badge("all", "alert", null, "Scheduled-check history has a warning; confirmed results remain visible", "container-notice");
-  return `<span class="container-indicators">${body}<span class="container-manager-symbol" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(s.provider === "dockhand" ? "external" : "server")}</span></span>`;
+  return `<span class="container-indicators">${body}${withManager ? `<span class="container-manager-symbol" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(s.provider === "dockhand" ? "external" : "server")}</span>` : ""}</span>`;
 }
 
 function containerResult(row) {

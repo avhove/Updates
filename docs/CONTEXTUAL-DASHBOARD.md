@@ -2,19 +2,26 @@
 
 ## Container status: native Docker and optional Dockhand
 
-The dashboard keeps the **Update** button. Its scope is OS packages, identified by the
-**Operating system** group heading and the update confirmation. The separate **Containers**
-column uses a blue boxes-and-count metric for image updates, aligned with Security/Package.
-Separate tag, information and warning metrics expose review items, coverage exceptions and failed
-checks. Clicking each opens the corresponding filter. Counts can overlap for the same container. A server icon means
-Fleetdeck management; an external-link icon means an external manager. Hover or focus names
-the manager. Clicking the metric expands container details beneath that machine; opening
-details never submits an action. The Containers tab remains available as a fleet-wide view.
-Mobile cards expose the same details and controls without adding selection controls.
-Both providers share a compact details panel and one table per machine, with a Stack column sorted alphabetically
-(case-insensitive, natural ordering), then by container name. Containers without Compose
-metadata are labelled Standalone and participate in that same sort. The inline machine
-details and Containers tab use the same table; narrow screens use labelled rows.
+The dashboard supports three views with one consistent table:
+
+- **All** shows an OS row and, where a provider is configured/discovered, a container row.
+- **Machines** shows OS rows and OS package details only.
+- **Containers** shows container hosts, container rows and container details only.
+
+Machine identity, selection and optional backup context span both rows in All. The machine's
+second line contains only its OS; type and policy badges stay beside its name. A single header
+reads Machine, Scope, Status, Updates, Checked, Backup (when available), Actions. Info remains
+available beside the machine identity. A container row has its own manager symbol, status,
+independent update/review/coverage/failure metrics, check ages and provider-specific action.
+The **Update** button keeps its name and appears exclusively on the OS row. Native Docker uses
+**View stacks**, with the existing confirmed **Update stack** action inside details; external
+management links to the configured manager. Neither tab selection nor expanding details starts a check.
+
+Both providers share the same compact details panel and flat table sorted by Stack then
+container/service name (case-insensitive, natural ordering). Containers without Compose metadata
+are labelled Standalone. Clicking each metric opens its corresponding details filter. Counts can
+overlap for one container. Mobile cards use the same separate OS/container sections and actions,
+with shared identity and backup context and no bulk-selection controls.
 
 For a Dockhand-only installation, keep native Docker checks and management disabled:
 
@@ -167,7 +174,7 @@ when there are no visible container hosts. Native hosts use their original confi
 Dockhand hosts use their mapped environment. Check requests skip hidden machines and
 checks already running. All writes use the authenticated, CSRF-protected `POST /api/dockhand/check`
 endpoint for exact mapped IDs. No native Docker jobs are submitted by these Dockhand controls. The existing four-check and thirty-second limits still
-apply; checks that cannot start are reported visibly and never automatically retried. The ordinary dashboard's time header is **OS checked**.
+apply; checks that cannot start are reported visibly and never automatically retried. The **Checked** column always refers to the scope of that row, not the inventory sync time.
 
 The parser is based on [Dockhand v1.0.56's scheduled check implementation](https://github.com/Finsys/dockhand/blob/v1.0.56/src/lib/server/scheduler/tasks/env-update-check.ts)
 and [its execution history API](https://github.com/Finsys/dockhand/blob/v1.0.56/src/routes/api/schedules/executions/%2Bserver.ts).
@@ -213,33 +220,37 @@ redirect refusal, cached reconciliation, confirmation/cancellation and simulated
 No live Dockhand environment was contacted. The history-sync revision was also reviewed in the
 local browser with simulated machines; native-device appearance still needs a device check.
 
-The first compact-layout revision placed type and OS below machine names, reduced column padding
-and widths, and switches to machine cards below 1200 px. Browser review with simulated machines
-confirmed that machine and expanded container tables fit at 1200 and 1440 px, with cards at
-1199 and 390 px. The refresh revision passed 53 focused backend tests (one skip and one
-platform-specific deselection), all 30 offline UI tests, and Ruff checks. No homelab connection
-or live deployment was used for this verification.
+### Two-row layout and scope views
 
-The revised column layout keeps type, monitor policy and existing badges beside the machine
-name; the second line contains only the OS. The machine column takes all remaining width
-(about 366 px at a 1440 px viewport with both backups and containers). Other columns have
-content budgets: 78 px for an icon and four-digit count, 158 px for the longest standard status
-(`updating Docker…`), 96 px for an 84 px action button and padding, 62 px for Reboot,
-88 px for relative backup/check ages such as `59 min ago`, 40 px for the backup job icon,
-144 px for the container indicators and manager symbol, 60 px for Info plus a repository warning,
-and 44 px for More. Counts and week ages are not bounded; unusually large values truncate
-within their cell with the full value available through a tooltip or accessible control label.
-Long machine names also retain their full hover text. Cards start below 1400 px so names
-are not squeezed to preserve the desktop table.
+All is the default combined view when containers are enabled. The earlier remembered Machines
+view migrates to All because it previously contained both scopes; explicit new choices are
+remembered separately. An existing remembered Containers view remains Containers. Without native
+Docker or Dockhand, the app falls back to the OS-only Machines view and hides the scope tabs.
 
-Backups groups Latest and Job; Operating system groups Security, Packages, Phased, Reboot,
-Status, Action and Checked. Machine, Containers, Info and More span both header rows.
-Dividers consistently separate identity, backups, OS, containers and utility controls.
-Without backups or containers, a single header row is sufficient. Column groups and header
-scopes match these boundaries, and all host groups retain identical columns. All 31 offline
-UI tests pass, including the four combinations of optional groups and merged headers.
-Browser checks used only simulated machines at 1380/1440 px and cards at 390 px, including
-long names, a 9999 count, `59 min ago`, failed checks and a busy Docker status.
+OS and container details retain independent expansion state but are rendered only in applicable
+views. Switching to Containers clears OS bulk selection and incompatible OS KPI filters. Switching
+to Machines clears a container-only KPI filter. Container-only groups preserve their host heading
+without adding OS-only parent rows. Global Check all and separate check menus keep their existing
+provider scopes regardless of the selected tab. The native bulk-fetch tool remains in Containers.
+
+The original OS/security/reboot/recheck KPI filters remain available, with explicit OS captions
+where applicable. An additional container-image-update KPI appears when container hosts exist;
+it selects the Containers view. Selecting targets and Update selected remain OS operations.
+
+Each row owns its check time. OS failures show the latest attempt; stale OS snapshots remain
+last-known. Container ages come from matching result/attempt timestamps, excluding local and
+policy-excluded records. Different ages show a range, unmatched records show an unchecked count,
+and failed/partial attempts are labelled. Empty data never borrows the inventory sync or last
+requested-check time. Synced remains inside container details. Disabled/external-without-reader
+providers retain explicit policy labels rather than invented successful check times.
+
+Desktop columns have content budgets (selection 30, identity 230, scope 108, status 164, metrics
+150, checked 112, optional backup 98, actions 164 px), distributed across the table width.
+Machine names and badges retain full accessible/hover labels. Cards start below 1120 px;
+checked results, update counts and per-scope actions wrap without page overflow. Horizontal
+boundaries separate machines, lighter boundaries separate OS/container rows, and vertical
+boundaries consistently separate identity, backup and actions. Single-scope views use normal
+cells; combined identity/backup cells span exactly two rows, never expanded detail panels.
 
 The pending endpoint is not a complete successful-check history. A missing pending record,
 an unsupported older API response or an empty environment inventory must not become **Up to date**.
@@ -307,19 +318,14 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
 - A short toolbar: **Check all**, with less frequent tasks in a compact icon-led menu.
   The menu separates inventory tasks from backup and notification tools, and marks the
   optional hidden-machine view without changing the menu label.
-- Single-line rows combine machine/state, type and a compact OS label in one flexible cell;
-  the full OS name remains available on the label and in machine information. Backup age and
-  job coverage retain separate columns; Last backup is capped at a compact 120 px width.
-  The table has one caption row. Security, Package, Phased and the icon-only Reboot indicator
-  stay together with centered compact cells. Status and Actions are separate and left-aligned.
-- Updates available uses a purple package icon and regular-weight label; the filled Update
-  action retains its download icon. Status is 150 px wide. Reboot
-  stays gold, Up to date stays green with regular weight, failed checks stay red with regular weight, and unavailable/unchecked states
-  use neutral icons. Full Security, Package and Phased cells open the package list, including
-  empty cells when the row has known packages. They share a subtle hover highlight and native
-  keyboard-accessible buttons; selection, Reboot and other actions remain independent.
-  All groups share the same columns and fixed compact widths, including backup columns when any
-  visible group has backup reporting. Machine names take priority over OS text when space is tight.
+- Machine identity uses a name/type/policy line and an OS-only second line. The All view
+  adds a container row only for applicable hosts; Machines and Containers isolate their scopes.
+  Status, update metrics, Checked and Actions are shared columns, never shared check results.
+- Nonzero Security, Package and Phased metrics and the reboot indicator share the OS Updates
+  cell. Metrics and the OS status control open package details. Container metrics open the
+  same provider-neutral details used in the Containers view. Existing status colors remain:
+  OS updates purple, container updates blue, reboot gold, confirmed current green, failures red.
+  Missing and stale results remain explicit; opening a control never submits an operation.
 - Dashboard and machine menus share item spacing, text, icon sizing and hover treatment.
   Machines and Settings include an icon on the Dashboard button, Back up & restore, and Test
   notifications when notification targets are configured. Shared handlers open the encrypted-backup
@@ -342,7 +348,7 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   Actions shows one next action: **Update**, **Check**, **Retry**, or **Reboot**. When updates and a
   reboot are both needed, Update takes priority; manual reboot remains in More and the existing
   update confirmation can request reboot afterwards. A current reboot requirement uses a small
-  gold box in the Reboot column, including when configuration prevents rebooting. Empty cells
+  gold box in the OS Updates cell, including when configuration prevents rebooting. Empty cells
   do not show placeholder dashes or an ambiguous Unknown reboot value.
 - Failed checks preserve the last successful package/reboot snapshot separately in persistent
   state. Offline or failed machines show muted last-known package counts, expandable with a
@@ -353,12 +359,12 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   Historical results lost before this version cannot be recovered.
 - Per-machine **More** menus use icons and concise labels for checks, configuration backups,
   hiding and any optional command-console or Docker actions that are actually available.
-- Backup age and job coverage use separate compact columns: a neutral calendar icon appears only
+- Backup age and job coverage share one compact cell: a neutral calendar icon appears only
   when a backup job covers the machine. A muted dash means no backup was found or backup
   information could not be read; Info explains which. Proxmox node configuration-backup cells stay blank.
   A job may exist even when Last backup is a dash. Ages use hours, days and weeks without changing job coverage.
   Exact dates, storage, counts, verification, job coverage and backup notes live in one neutral
-  information popover in a dedicated compact **Info** column; Proxmox nodes also include repository context there.
+  information popover beside the machine identity; Proxmox nodes also include repository context there.
 - Selecting machines reveals the bulk-update bar. Updates and reboots retain their confirmation dialogs.
   The update dialog has a compact machine summary and aligned options. Snapshot first and Reboot
   if required both start unchecked every time; users explicitly opt in for each operation. This
@@ -371,15 +377,10 @@ This fork changes the dashboard, not the OS upgrade commands or snapshot impleme
   rounded branches and an exact final endpoint to keep the hierarchy clear without wasting name
   space. Online and offline dots use matching green or red halos.
 - The Fleetdeck logo links home, and dashboard/setup/login pages have a favicon.
-- Narrow screens render dedicated machine cards using the same update, backup and action logic
-  as the desktop table. Type and OS sit below the name, status at the top right, and check time
-  directly below status. Nonzero Security, Package and Phased counts are icon-only; the boxed
-  reboot indicator aligns right. Update-type and reboot icons are 18 px; the reboot box is 32 px.
-  Info follows the check time in a consistent location on every card. Backup age and job coverage
-  stay together. Cards without an action omit the empty action footer and place More on the backup
-  or a compact bottom-right utility row. Where an action exists, the footer has the action left and More right, with no divider.
-  Mobile actions share a 96 × 36 px size, with expanded touch areas. Spacing around the icon row
-  accounts for the visible label and badge edges, and status text is slightly larger at 13 px.
+- Narrow screens render dedicated machine cards with shared name/type identity and an OS-only
+  second line. OS and container sections have their own status, metrics, check age and actions,
+  following the selected view. Info stays accessible in every view. Backup age and job coverage
+  remain shared context. Existing confirmations and provider action guards are preserved.
   Mobile cards have no selection controls; bulk selection remains available on desktop. Switching
   to mobile clears desktop selection so hidden bulk operations cannot remain pending. The toolbar
   places the controls on a separate row below the logo, shared across Dashboard, Machines and Settings. Icon controls are 44 px squares with even gaps; menus stay inside the viewport. Info aligns with the right edge of the card. KPIs use two columns with extra inset for their numbers. Expanded package details retain a local
@@ -531,3 +532,12 @@ missing-result coverage and read-only polling. Browser review uses local simulat
 
 Desktop geometry was checked at 1400 and 1440 px, with labelled container rows at 390 px.
 Both providers fit without page overflow. No real machines, registry or Dockhand instance were contacted.
+
+### Two-row dashboard and three-view verification
+
+The revision passes all 48 offline UI tests and 44 focused backend tests (one existing skip and
+one Linux boot-ID test deselected). Coverage includes both providers, all scope views on desktop
+and mobile, merged-cell accounting with both details open, independent check ages/ranges,
+missing/local/failed results, scoped menus, read-only tab changes, OS-only selections and deployment
+guards. Local browser review used simulated machines at 1440/1120 px and mobile cards at 390 px.
+No configuration, scheduler behavior, backend actions or live infrastructure was changed.
