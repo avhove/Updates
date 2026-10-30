@@ -1,7 +1,7 @@
 "use strict";
 
 const state = { targets: [], errors: {}, settings: {}, backupPlaces: {}, jobs: [], schedule: null, selected: new Set(), expanded: new Set(), containerExpanded: new Set(), logJob: null, logLines: [], showHidden: false, view: "machines", filter: null };
-const mobileDashboard = matchMedia("(max-width: 1379px)");
+const mobileDashboard = matchMedia("(max-width: 1399px)");
 const $ = (sel) => document.querySelector(sel);
 const renderedHTML = new WeakMap();
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -28,6 +28,7 @@ const ICON = {
   backupJob: '<path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 11V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6"/><path d="M3 10h18"/><circle cx="17" cy="17" r="5"/><path d="M17 14v3l2 1"/>',
   noBackup: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6"/><path d="m15 9-6 6"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8h.01"/>',
+  tag: '<path d="M20 13 13 20a2 2 0 0 1-3 0L2 12V2h10l8 8a2 2 0 0 1 0 3Z"/><path d="M7 7h.01"/>',
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4"/><path d="M12 17h.01"/>',
   alert: '<path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
 };
@@ -44,6 +45,7 @@ const remember = {
   get(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private window */ } },
 };
+state.containerFilters = Object.create(null);
 state.showHidden = !!remember.get("showHidden");
 state.view = remember.get("dashboardView") === "containers" ? "containers" : "machines";
 // Hidden machines stay out of the counts, Check all and Update selected, even while shown.
@@ -224,71 +226,6 @@ function managerLink(v, label) {
   return `<button class="docker-status-link" data-docker-settings="${esc(v.target.id)}">${esc(label)}</button>`;
 }
 
-function dockerCell(v) {
-  if (!hasDocker(v)) return "";
-  const policy = dockerSettings(v);
-  if (policy.mode === "disabled") return `<span class="muted">disabled</span>`;
-  const r = v.stacks;
-  const external = policy.mode === "external", dh = v.dockhand;
-  const nativeCount = (r?.stacks || []).filter(s => !s.error).reduce((n, s) => n + s.services.filter(c => c.outdated && ["running", "restarting"].includes(c.status)).length, 0);
-  const count = external ? (dh?.containers || []).filter(c => c.status === "update").length : nativeCount;
-  const scheduledFailureNewer = dh?.scheduled_status === "failed" && (!dh.last_check_at || !dh.scheduled_check_at || Date.parse(dh.last_check_at) < Date.parse(dh.scheduled_check_at));
-  const unknown = external ? !dh || dh.stale || !!dh.error || !!dh.check_error || !dh.containers.length || (!count && (scheduledFailureNewer || dh.containers.some(c => ["unknown", "failed", "local"].includes(c.status)))) : !r || !!r.error || dockerErrors(v) > 0 || !r.stacks.length;
-  const value = unknown ? "?" : count;
-  const manager = external ? `Managed externally by ${policy.manager_name}` : policy.mode === "monitor" ? "Fleetdeck · monitor only" : "Managed by Fleetdeck";
-  const description = unknown ? "Container status unknown or incomplete" : `${count} ${plural(count, "container with an image update", "containers with image updates")}`;
-  return `<button class="container-metric-hit" data-open-docker="${esc(v.target.id)}" data-focus-key="docker:${esc(v.target.id)}" aria-expanded="${state.containerExpanded.has(v.target.id)}" aria-label="${esc(`${description}. ${manager}. View container details`)}" title="${esc(`${description} · ${manager}`)}"><span class="update-metric container${unknown ? " unknown" : ""}">${icon("boxes")}${value}</span><span class="container-manager-symbol">${icon(external ? "external" : "server")}</span></button>`;
-}
-
-function dockhandPanel(v) {
-  const dh = v.dockhand, id = esc(v.target.id);
-  const status = { update: "Image update reported", current: "Up to date", failed: "Check failed", local: "Local image · registry check unavailable", unknown: "No confirmed check result", advisory: "Version / pinned digest advisory", deferred: "Update deferred by Dockhand", excluded: "Excluded by policy" };
-  const stackName = c => c.stack || "Standalone";
-  const compare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-  const items = [...dh.containers].sort((a, b) => compare(stackName(a), stackName(b)) || compare(a.name, b.name) || compare(a.image, b.image));
-  const rows = () => `<div class="group-scroll"><table class="dockhand-table" aria-label="${esc(v.target.name)} containers sorted by stack"><colgroup><col class="dh-name"><col class="dh-stack"><col class="dh-image"><col class="dh-status"><col class="dh-report"></colgroup><thead><tr><th>Container</th><th>Stack</th><th>Image</th><th>Status</th><th>Last checked</th></tr></thead><tbody>${items.map(c => `<tr><td class="dockhand-name">${esc(c.name)}<div class="cell-detail muted">${esc(c.state)}</div></td><td data-label="Stack" class="muted">${esc(stackName(c))}</td><td data-label="Image">${esc(c.image)}</td><td data-label="Status" class="${c.status === "update" ? "container-tone" : c.status === "current" ? "ok" : c.status === "failed" ? "bad" : "muted"}">${esc(status[c.status] || status.unknown)}</td><td data-label="Last checked" class="muted" title="${esc(c.source === "dockhand_schedule" ? "From Dockhand scheduled-check history" : c.source === "fleetdeck_button" ? "From a check requested through Fleetdeck" : "From Dockhand pending-update reports")}">${c.checked_at ? ago(c.checked_at) : "Unknown"}</td></tr>`).join("")}</tbody></table></div>`;
-  const failed = items.filter(c => c.status === "failed").length;
-  const retention = state.settings.dockhand_results_persistent === false ? "Persistent state storage is unavailable, so results are kept only until Fleetdeck restarts." : "Confirmed results are saved across Fleetdeck restarts.";
-  const scheduledState = { success: dh.scheduled_errors ? `Completed with ${dh.scheduled_errors} ${plural(dh.scheduled_errors, "check error", "check errors")}` : "Completed", warning: "Completed with warnings", failed: "Failed", running: "Running", queued: "Queued", skipped: "Skipped", unknown: "Result unavailable" };
-  const scheduled = dh.scheduled_check_at ? `Dockhand scheduled check: ${ago(dh.scheduled_check_at)} · ${scheduledState[dh.scheduled_status] || "Result unavailable"}${dh.scheduled_checked != null ? ` · ${dh.scheduled_checked} containers checked` : ""}` : "No scheduled-check history reported by Dockhand.";
-  const checkButton = `<button class="small" data-dockhand-check="${id}" ${!state.settings.dockhand_checks_allowed || dh.checking ? "disabled" : ""} title="${state.settings.dockhand_checks_allowed ? "Check image updates in Dockhand; no containers are restarted" : "Enable dockhand.allow_checks in Settings to allow explicit checks"}">${icon("refresh")}${dh.checking ? "Checking…" : "Check in Dockhand"}</button>`;
-  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("boxes")}${esc(v.target.name)}<span class="host-mode muted">Dockhand · ${state.settings.dockhand_checks_allowed ? "manual checks" : "read-only"}</span>${checkButton}${managerLink(v, "Open Dockhand")}</div><p class="muted">Synced ${dh.synced_at ? ago(dh.synced_at) : "never"} · Last requested check: ${dh.last_check_at ? ago(dh.last_check_at) : "never"}.</p><p class="muted">${esc(scheduled)}</p>${dh.history_error ? `<p class="warn" role="status">${esc(dh.history_error)}</p>` : ""}${dh.checking ? '<p role="status" aria-live="polite">Checking image updates in Dockhand… Containers continue running.</p>' : ""}${dh.check_error ? `<p class="bad" role="status">${esc(dh.check_error)}</p>` : dh.last_check_at ? `<p class="${failed ? "bad" : "muted"}" role="status">Check completed${failed ? ` · ${failed} ${plural(failed, "container check failed", "container checks failed")}` : ""}.</p>` : ""}${dh.error ? `<p class="bad">${esc(dh.error)}${dh.synced_at ? " Last-known results follow; status is stale." : ""}</p>` : ""}<div class="docker-check-note muted"><p>Dockhand owns the scheduled checks. Fleetdeck’s automatic dashboard polling reads saved reports without starting new checks. Check all requests fresh OS and Dockhand digest checks when enabled. Refresh inventory only rediscovers machines and reads saved reports; Dockhand’s schedule stays unchanged.</p><p><strong>Synced</strong> is when Fleetdeck fetched the reports. <strong>Last checked</strong> is the confirmed check time for each container. ${retention} Unknown means no result could be reliably matched to this container.</p><p><strong>Check in Dockhand</strong> queries registry digests and metadata. It does not download image layers, change the schedule or restart containers. The dashboard and per-machine … menus offer Check OS updates and Check container updates separately. Container deployments stay in Dockhand; the per-machine Update button handles OS packages only.</p></div>${items.length ? rows() : '<p class="muted">Container status unavailable.</p>'}</section>`;
-}
-
-function stackPanel(v) {
-  if (v.dockhand) return dockhandPanel(v);
-  const id = esc(v.target.id), r = v.stacks, busy = !!v.active_job;
-  const policy = dockerSettings(v), managed = policy.mode === "managed";
-  const prune = !!remember.get("pruneImages");
-  let body;
-  if (policy.mode === "disabled") body = `<p class="muted">Docker checks and deployments are disabled. OS updates remain independent.</p>`;
-  else if (policy.mode === "external") body = `<p class="muted">Docker checks and deployments are handled by ${esc(policy.manager_name)}. Fleetdeck continues to manage OS updates.</p><p>${managerLink(v, `Open ${policy.manager_name}`)}</p>`;
-  else if (!r) body = `<p class="muted">Image updates have not been checked. Fetch image updates to download newer images and compare them with the running containers. Nothing is restarted.</p>`;
-  else if (r.error) body = `<p class="${r.docker === "none" ? "muted" : "bad"}">${esc(r.error)}</p>`;
-  else if (!r.stacks.length) body = `<p class="muted">No Docker Compose stacks found. Standalone containers are not checked by Fleetdeck; their update status is unknown.</p>`;
-  else {
-    const rows = r.stacks.map((s) => {
-      const behind = s.services.filter((x) => x.outdated && s.state !== "stopped").map((x) => x.name);
-      let status;
-      if (s.error) status = `<span class="bad" title="${esc(s.error)}">unknown · check failed</span><div class="cell-detail">${esc(s.error)}</div>`;
-      else if (s.state === "stopped") status = `<span class="muted">stopped</span>`;
-      else if (behind.length) status = `<span class="warn" title="${esc(behind.join(", "))}">update available</span>`;
-      else status = `<span class="ok">up to date</span>`;
-      const up = s.state === "partial" ? ` <span class="chip warn" title="Services that are stopped stay stopped">partly running</span>` : "";
-      const self = s.is_dashboard ? ` <span class="chip" title="This dashboard runs in this stack. Updating it would stop the update itself: run docker compose pull && docker compose up -d in a terminal.">dashboard</span>` : "";
-      const can = !v.monitor_only && managed && canUpgrade(v.target) && !v.blocked && !busy && !s.error && s.state !== "stopped" && !s.is_dashboard && r.compose !== "none";
-      const btn = managed && behind.length && !s.is_dashboard ? `<button class="small primary" data-stack="${esc(s.name)}" data-id="${id}" ${can ? "" : "disabled"} title="${esc((v.monitor_only ? MONITOR_TIP : "") || v.blocked || s.error || "Download images and recreate running services")}">Update stack</button>` : s.is_dashboard ? `<span class="muted">update externally</span>` : "";
-      return `<tr><td class="name">${esc(s.name)}${self}${up}</td><td class="muted" data-label="Services">${s.services.map((x) => esc(x.name)).join(", ")}</td><td data-label="Image status">${status}</td><td class="actions">${btn}</td></tr>`;
-    }).join("");
-    body = `<div class="group-scroll"><table><thead><tr><th>Stack</th><th>Services</th><th>Image status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
-  return `<div class="group docker-host" id="docker-${id}"><div class="group-head"><span class="chip">Docker</span>${esc(v.target.name)}<span class="host-mode muted">${esc({ managed: "Managed by Fleetdeck", monitor: "Monitor only", external: `Managed by ${policy.manager_name}`, disabled: "Disabled" }[policy.mode])}</span><button class="small" data-docker-settings="${id}">Settings</button></div>
-    ${dockerEnabled(v) ? `<div class="docker-head"><span class="muted">${r ? `Checked ${ago(r.checked_at)}` : "Not checked"}</span>
-      <button class="small" data-act="stacks" data-id="${id}" ${!busy && canUpgrade(v.target) ? "" : "disabled"}>Fetch image updates</button>
-      ${managed ? `<label class="muted" title="Runs docker image prune: removes all unused, untagged images on this machine, not only this stack's"><input type="checkbox" data-prune ${prune ? "checked" : ""}> remove unused, untagged images after updating</label>` : `<span class="chip">Stack deployments disabled</span>`}</div><p class="docker-check-note muted">Fetching downloads images. Updating a stack recreates its running services; OS packages are separate.</p>` : ""}
-    ${body}${dockerEnabled(v) ? '<p class="docker-check-note muted">Coverage: Docker Compose stacks only. Standalone containers are outside Fleetdeck checks.</p>' : ""}</div>`;
-}
-
 // Single-purpose columns span both header rows; only real groups get subheadings.
 function machineTableHead(withBackup) {
   const containers = containersVisible(), grouped = withBackup || containers;
@@ -373,7 +310,7 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     html += mobile ? `<div class="mc-package-panel" id="packages-${esc(t.id)}">${panel}</div>` : `<tr class="${detailClasses.join(" ")}" id="packages-${esc(t.id)}"><td></td><td colspan="${10 + (2 * Number(!!withBackup)) + Number(containersVisible())}">${panel}</td></tr>`;
   }
   if (state.containerExpanded.has(t.id) && hasDocker(v)) {
-    const panel = stackPanel(v).replace(`id="docker-${esc(t.id)}"`, `id="inline-docker-${esc(t.id)}"`);
+    const panel = stackPanel(v).replace(`id="docker-${esc(t.id)}"`, `id="inline-docker-${esc(t.id)}"`).replaceAll('data-focus-key="container-filter:', 'data-focus-key="inline-container-filter:');
     html += mobile ? `<div class="mc-container-panel">${panel}</div>` : `<tr class="container-detail"><td colspan="${11 + (2 * Number(!!withBackup)) + Number(containersVisible())}">${panel}</td></tr>`;
   }
   return html;
@@ -410,12 +347,12 @@ function render() {
   $("#schedule-status").innerHTML = scheduleStat();
   html("#check-os", `${icon("refresh")}<span>Check OS updates</span>`);
   html("#check-containers", `${icon("boxes")}<span>Check container updates</span>`);
-  $("#check-containers").hidden = !active().some(v => v.dockhand);
-  $("#check-containers").disabled = !state.settings.dockhand_checks_allowed || requestingDockhandChecks;
-  $("#check-containers").title = state.settings.dockhand_checks_allowed ? "Request fresh Dockhand digest checks only; no OS checks, image downloads or container restarts" : "Enable dockhand.allow_checks in Settings to allow fresh Dockhand checks";
+  $("#check-containers").hidden = !active().some(hasDocker);
+  $("#check-containers").disabled = requestingDockhandChecks || (!nativeContainerHosts().length && !active().some(v => v.dockhand && state.settings.dockhand_checks_allowed));
+  $("#check-containers").title = "Check containers using each machine's provider. Fleetdeck native checks pull images after confirmation; Dockhand checks registry metadata.";
   $("#refresh span").textContent = "Refresh inventory";
-  $("#check-all").title = state.settings.dockhand_checks_allowed ? "Check OS updates and request fresh Dockhand digest checks; no containers are restarted" : "Check OS updates";
-  $("#refresh").title = "Rediscover machines and read saved Dockhand reports; no fresh update checks";
+  $("#check-all").title = state.settings.dockhand_checks_allowed || state.settings.docker_enabled ? "Check OS and container updates using their configured providers; native image pulls require confirmation" : "Check OS updates";
+  $("#refresh").title = "Rediscover machines and read saved container reports; no fresh update checks";
   $("#test-notify").hidden = !state.schedule?.notify_targets;
 
   const hiddenCount = state.targets.length - active().length;
@@ -514,7 +451,7 @@ function openMachineMenu(id, trigger) {
     action("check", "Check OS updates", "refresh", t.updatable && !busy) +
     (v.dockhand ? action("dockhand", "Check container updates", "boxes", state.settings.dockhand_checks_allowed && !v.dockhand.checking,
       !state.settings.dockhand_checks_allowed ? "Enable dockhand.allow_checks in Settings to allow fresh checks" : v.dockhand.checking ? "A Dockhand check is already running" : "Request a fresh Dockhand digest check for this machine; no downloads or restarts")
-      : hasDocker(v) && dockerEnabled(v) ? action("stacks", "Check container updates", "boxes", t.updatable && !busy,
+      : hasDocker(v) && dockerEnabled(v) ? action("stacks", "Check container updates", "boxes", canUpgrade(t) && !busy,
         "Fleetdeck native checks pull Compose images; confirmation is required") : "") +
     (nextAction(v).includes('data-act="reboot"') ? "" : action("reboot", "Reboot", "reboot", canReboot(t) && !busy && !v.blocked, t.no_reboot || v.blocked || t.note)) +
     (t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
@@ -649,11 +586,11 @@ async function load(refresh = false) {
 }
 
 let requestingDockhandChecks = false;
-async function requestDockhandChecks() {
+async function requestDockhandChecks(targetIds = null) {
   if (requestingDockhandChecks || !state.settings.dockhand_checks_allowed) return;
   requestingDockhandChecks = true;
   try {
-    const hosts = active().filter(v => v.dockhand && !v.dockhand.checking);
+    const hosts = active().filter(v => v.dockhand && !v.dockhand.checking && (!targetIds || targetIds.includes(v.target.id)));
     const errors = [];
     for (const host of hosts) {
       try {
@@ -672,6 +609,17 @@ async function requestDockhandChecks() {
     requestingDockhandChecks = false;
     render();
   }
+}
+
+const nativeContainerHosts = () => active().filter(v => !v.dockhand && dockerEnabled(v) && hasDocker(v) && canUpgrade(v.target) && !v.active_job);
+function requestContainerChecks() {
+  const native = nativeContainerHosts();
+  if (native.length) {
+    const ids = [...native, ...active().filter(v => v.dockhand && state.settings.dockhand_checks_allowed && !v.dockhand.checking)].map(v => v.target.id);
+    confirmAction("containers", ids);
+    return;
+  }
+  return requestDockhandChecks();
 }
 
 async function checkOsUpdates() {
@@ -718,6 +666,11 @@ async function act(action, ids, { rebootIfRequired = false, snapshotFirst = fals
 }
 
 const CONFIRM = {
+  containers: {
+    title: "Check container images?",
+    text: "Fleetdeck native hosts: download (pull) newer Docker Compose images to compare, which uses bandwidth and disk space. Dockhand hosts: request registry digest and metadata checks without image-layer downloads. Nothing is deployed or restarted. Cancelling leaves both container providers unchanged.",
+    ok: "Check containers",
+  },
   dockhand: {
     title: "Check containers in Dockhand?",
     text: "Ask Dockhand to check all containers in this machine's mapped environment against their registries. Container images are not deployed and containers are not restarted. Results will appear here.",
@@ -790,6 +743,7 @@ function confirmAction(action, ids) {
       ].filter(Boolean).join("");
     }
     if (action === "backup" || action === "stacks" || action === "dockhand") detail = "";
+    if (action === "containers") detail = v?.dockhand ? "Dockhand · registry metadata only" : "Fleetdeck native · downloads Compose images";
     if (action === "reboot") {
       detail = v?.check?.reboot_required ? "reboot needed" : "";
       const t = v?.target;
@@ -823,6 +777,12 @@ function confirmAction(action, ids) {
   dlg.showModal();
   dlg.addEventListener("close", async () => {
     if (dlg.returnValue !== "ok") return;
+    if (action === "containers") {
+      await act("stacks", ids.filter(id => { const v = state.targets.find(v => v.target.id === id); return v && !v.dockhand && dockerEnabled(v); }));
+      await requestDockhandChecks(ids);
+      schedule(1000);
+      return;
+    }
     if (action === "dockhand") {
       try {
         await api("/api/dockhand/check", { method: "POST", body: JSON.stringify({ target_id: ids[0] }) });
@@ -938,17 +898,20 @@ document.addEventListener("click", (e) => {
 
 document.addEventListener("click", (e) => {
   if (!e.target.closest("#dashboard-menu") || e.target.closest(".dashboard-menu-items button,.dashboard-menu-items a")) $("#dashboard-menu").open = false;
-  const el = e.target.closest("[data-machine-menu],[data-machine-info],[data-open-docker],[data-docker-settings],[data-view],[data-fetch-docker],[data-discover-docker],[data-dockhand-check]");
+  const el = e.target.closest("[data-machine-menu],[data-machine-info],[data-open-docker],[data-docker-settings],[data-view],[data-fetch-docker],[data-discover-docker],[data-dockhand-check],[data-container-view-filter]");
   if (el?.dataset.machineMenu) { openMachineMenu(el.dataset.machineMenu, el); return; }
   if (el?.dataset.machineInfo) { openMachineInformation(el.dataset.machineInfo, el); return; }
   if (!e.target.closest("#machine-actions")) closeMachineMenu();
   if (!e.target.closest("#machine-information")) closeMachineInformation();
   if (!el || el.disabled) return;
+  if (el.dataset.containerViewFilter) { state.containerFilters[el.dataset.id] = el.dataset.containerViewFilter; render(); return; }
   if (el.dataset.dockhandCheck) confirmAction("dockhand", [el.dataset.dockhandCheck]);
   else if (el.dataset.view) setView(el.dataset.view);
   else if (el.dataset.openDocker) {
     const id = el.dataset.openDocker;
-    state.containerExpanded.has(id) ? state.containerExpanded.delete(id) : state.containerExpanded.add(id);
+    const filter = el.dataset.containerFilter || "all";
+    if (state.containerExpanded.has(id) && (state.containerFilters[id] || "all") === filter) state.containerExpanded.delete(id);
+    else { state.containerExpanded.add(id); state.containerFilters[id] = filter; }
     render();
   }
   else if (el.dataset.dockerSettings) openDockerSettings(el.dataset.dockerSettings);
@@ -1018,14 +981,14 @@ $("#rollback").onclick = async (e) => {
 window.FleetdeckTools.bindBackup($("#backup"), $("#backup-dialog"));
 
 $("#check-os").onclick = checkOsUpdates;
-$("#check-containers").onclick = requestDockhandChecks;
+$("#check-containers").onclick = requestContainerChecks;
 $("#check-all").onclick = async () => {
   const button = $("#check-all");
   if (button.disabled) return;
   button.disabled = true;
   try {
     await checkOsUpdates();
-    await requestDockhandChecks();
+    await requestContainerChecks();
   } finally {
     button.disabled = false;
   }

@@ -225,7 +225,7 @@ def parse_duration(value: str | int) -> int:
 class ScheduleConfig(BaseModel):
     # Check every machine for updates this often (e.g. 6h, 1d). Unset: only when you click Check.
     check_every: int | None = None
-    # Also look for newer Docker images on every machine with Docker. Off by default: it pulls the images.
+    # Include container checks in scheduled rounds. Native checks pull images; Dockhand uses registry metadata.
     check_docker: bool = False
     # After each check, install the updates from security repositories (apt only) on every machine that has
     # some: hosts first, then their containers and VMs. Never reboots. Off by default.

@@ -108,7 +108,9 @@ def test_default_os_only_dashboard_rejects_manual_and_bulk_docker_jobs():
     with TestClient(app) as client:
         data = client.get("/api/targets").json()
         assert data["settings"]["docker_enabled"] is False
-        assert app.state.scheduler.check_docker is False
+        assert app.state.scheduler.check_docker is True  # Preserve the configured schedule flag.
+        assert app.state.scheduler.dockhand is None
+        assert app.state.jobs.docker_enabled is False  # Native operations remain blocked independently.
         tid = data["targets"][0]["target"]["id"]
         for action in ("stacks", "stack-update"):
             result = client.post("/api/actions", json={"action": action, "target_ids": [tid]}).json()

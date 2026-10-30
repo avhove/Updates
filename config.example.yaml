@@ -69,8 +69,10 @@ docker_enabled: false
 # automatically unless you turn on auto_security_updates below; you get a notification when something new is pending.
 schedule:
   check_every: 6h
-  # Requires docker_enabled: true. Also look for newer Docker images on every machine with Docker. Off by default because it
-  # downloads (pulls) the images each time, which can use a lot of bandwidth and disk space.
+  # Include container checks in scheduled rounds (off by default), using each machine's provider.
+  # Fleetdeck native: requires docker_enabled: true and downloads Compose images.
+  # Dockhand: requires dockhand.allow_checks: true and compares registry metadata; no image-layer downloads.
+  # Docker deployments/restarts are never scheduled by this flag.
   # check_docker: true
   # After each check, install the security updates it found, with no click: hosts first, then their
   # containers, LXCs and VMs. Off by default. Never reboots.

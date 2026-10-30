@@ -29,6 +29,14 @@ class ContainerStatus(BaseModel):
     status: str = "unknown"
     checked_at: datetime | None = None
     source: str | None = None
+    image_update: bool | None = None
+    newer_version: str | None = Field(default=None, max_length=128)
+    advisory: bool = False
+    pinned_digest: bool = False
+    deferred_hours: float | None = Field(default=None, ge=0, le=100000)
+    check_issue: str | None = None
+    reported_at: datetime | None = None
+    advisory_at: datetime | None = None
 
 
 class DockhandStatus(BaseModel):
@@ -51,6 +59,66 @@ class DockhandStatus(BaseModel):
 class SavedDockhand(BaseModel):
     status: DockhandStatus
     checked: list[ContainerStatus]
+
+
+def issue_code(error: object) -> str:
+    # Return only fixed categories, never registry error text which can contain credentials.
+    value = str(error).lower()
+    if any(word in value for word in ("429", "rate limit", "toomanyrequests")):
+        return "rate_limit"
+    if any(word in value for word in ("401", "403", "unauthor", "denied", "authentication")):
+        return "authentication"
+    if "timeout" in value or "timed out" in value:
+        return "timeout"
+    return "registry"
+
+
+def findings(item: ContainerStatus, row: dict, at: datetime | None, *, pending: bool = False) -> ContainerStatus:
+    update = row.get("hasImageUpdate" if pending else "hasUpdate")
+    item.image_update = update if type(update) is bool else None
+    version = row.get("newerVersion")
+    if isinstance(version, dict) and isinstance(version.get("tag"), str):
+        item.newer_version = version["tag"][:128]
+    item.pinned_digest = row.get("pinnedToDigest") is True
+    hours = row.get("releaseAgeRemainingHours")
+    if type(hours) in (int, float) and 0 < hours <= 100000:
+        item.deferred_hours = float(hours)
+    if item.status in {"excluded", "local", "failed", "unknown"}:
+        item.image_update = None
+    if item.pinned_digest or item.status == "deferred":
+        item.image_update = False
+    if item.status == "current":
+        item.image_update = False
+    if item.status == "failed":
+        item.check_issue = issue_code(row.get("error"))
+    if pending and item.status != "deferred" and row.get("hasImageUpdate") is True:
+        item.deferred_hours = None
+    item.advisory = bool(item.newer_version or item.pinned_digest or item.deferred_hours or item.status == "advisory")
+    if item.advisory:
+        item.advisory_at = at
+    if item.image_update:
+        item.reported_at = at
+    return item
+
+
+def retain_findings(item: ContainerStatus, old: ContainerStatus | None) -> ContainerStatus:
+    if old and old.container_id == item.container_id and old.image == item.image:
+        # A failed/partial latest check cannot erase a previously confirmed update or advisory.
+        if item.status in {"failed", "unknown"}:
+            item.image_update = (
+                old.image_update
+                if old.image_update is not None
+                else (True if old.status == "update" else False if old.status == "current" else None)
+            )
+            fresh_review = item.advisory
+            item.advisory = item.advisory or old.advisory or old.status in {"advisory", "deferred"}
+            item.newer_version = item.newer_version or old.newer_version
+            item.pinned_digest = item.pinned_digest or old.pinned_digest
+            item.deferred_hours = item.deferred_hours if item.deferred_hours is not None else old.deferred_hours
+            if not fresh_review:
+                item.advisory_at = old.advisory_at or old.checked_at
+            item.reported_at = old.reported_at or (old.checked_at if old.status == "update" else None)
+    return item
 
 
 def timestamp(value: object) -> datetime | None:
@@ -124,14 +192,19 @@ def scheduled_results(execution: dict, containers: list, environment_id: int) ->
             continue
         outer_error = re.fullmatch(r"  \[(.+)\] Error:.*", message)
         if current is not None and outer_error and outer_error[1] == current["name"]:
-            outcomes[current["id"]] = ContainerStatus(
-                container_id=current["id"],
-                name=current["name"],
-                image=current["image"],
-                state=str(current.get("state", "unknown"))[:40],
-                status="failed",
-                checked_at=at,
-                source="dockhand_schedule",
+            previous = outcomes.get(current["id"])
+            outcomes[current["id"]] = retain_findings(
+                ContainerStatus(
+                    container_id=current["id"],
+                    name=current["name"],
+                    image=current["image"],
+                    state=str(current.get("state", "unknown"))[:40],
+                    status="failed",
+                    checked_at=at,
+                    source="dockhand_schedule",
+                    check_issue=issue_code(message),
+                ),
+                previous,
             )
         if not message.startswith("    "):
             current = None
@@ -154,7 +227,8 @@ def scheduled_results(execution: dict, containers: list, environment_id: int) ->
             previous = outcomes.get(current["id"])
             status = previous.status if previous and previous.status in {"update", "deferred"} else "advisory"
         if status:
-            outcomes[current["id"]] = ContainerStatus(
+            previous = outcomes.get(current["id"])
+            record = ContainerStatus(
                 container_id=current["id"],
                 name=current["name"],
                 image=current["image"],
@@ -163,6 +237,32 @@ def scheduled_results(execution: dict, containers: list, environment_id: int) ->
                 checked_at=at,
                 source="dockhand_schedule",
             )
+            if previous:
+                record = previous.model_copy(update={"status": status, "checked_at": at})
+            if value == "UPDATE AVAILABLE":
+                record.image_update, record.reported_at = True, at
+            elif value == "Up to date" and not record.pinned_digest and record.image_update is not True:
+                record.image_update = False
+            elif value.startswith("NEWER VERSION:"):
+                record.newer_version = value.split(":", 1)[1].strip().split(" ", 1)[0][:128]
+            elif value.startswith("Reported only - the digest is pinned"):
+                record.pinned_digest, record.image_update = True, False
+            elif value.startswith("Update deferred:"):
+                number = re.search(r"Update deferred: (\d+(?:\.\d+)?)", value)
+                if number and 0 < float(number[1]) <= 100000:
+                    record.deferred_hours = float(number[1])
+                record.image_update = False
+            if status == "failed":
+                record.check_issue = issue_code(value)
+            if value.startswith(("NEWER VERSION:", "Reported only - the digest is pinned", "Update deferred:")):
+                record.advisory_at = at
+            record.advisory = bool(
+                record.newer_version
+                or record.pinned_digest
+                or record.deferred_hours
+                or status in {"advisory", "deferred"}
+            )
+            outcomes[current["id"]] = record
     details = execution.get("details") or {}
     expected = details.get("containersChecked") if isinstance(details, dict) else None
     if type(expected) is not int or expected != check_lines:
@@ -185,9 +285,12 @@ def demo_status(url: str) -> DockhandStatus:
         containers=[
             ContainerStatus(
                 name="web",
-                image="example/web:latest",
+                image="example/web:1.0",
                 state="running",
                 stack="demo-app",
+                image_update=True,
+                newer_version="1.1",
+                advisory=True,
                 status="update",
                 checked_at=now,
             ),
@@ -202,6 +305,63 @@ def demo_status(url: str) -> DockhandStatus:
             ),
             ContainerStatus(
                 name="standalone", image="example/tool:latest", state="running", status="update", checked_at=now
+            ),
+            ContainerStatus(
+                name="database",
+                image="example/database:16.2",
+                state="running",
+                stack="database",
+                status="advisory",
+                image_update=False,
+                newer_version="16.15",
+                advisory=True,
+                checked_at=now,
+                source="fleetdeck_button",
+            ),
+            ContainerStatus(
+                name="fleetdeck",
+                image="fleetdeck-local:ui-v1",
+                state="running",
+                stack="fleetdeck",
+                status="local",
+                checked_at=now,
+            ),
+            ContainerStatus(
+                name="excluded", image="example/internal:1", state="running", stack="internal", status="excluded"
+            ),
+            ContainerStatus(name="replacement", image="example/replacement:latest", state="running", status="unknown"),
+            ContainerStatus(
+                name="waiting",
+                image="example/waiting:latest",
+                state="running",
+                stack="waiting",
+                status="deferred",
+                image_update=False,
+                deferred_hours=6,
+                advisory=True,
+                checked_at=now,
+            ),
+            ContainerStatus(
+                name="pinned",
+                image="example/pinned:2@sha256:demo",
+                state="running",
+                stack="pinned",
+                status="advisory",
+                image_update=False,
+                pinned_digest=True,
+                advisory=True,
+                checked_at=now,
+            ),
+            ContainerStatus(
+                name="rate-limited",
+                image="example/limited:latest",
+                state="running",
+                stack="limited",
+                status="failed",
+                image_update=True,
+                check_issue="rate_limit",
+                reported_at=now,
+                checked_at=now,
             ),
         ],
     )
@@ -221,14 +381,23 @@ def normalize(containers: object, pending: object) -> list[ContainerStatus]:
         labels = c.get("labels") or {}
         if not isinstance(labels, dict):
             raise ValueError("Unsupported Dockhand labels")
-        if labels.get("dockhand.hidden") == "true":
+        if str(labels.get("dockhand.hidden", "")).lower() in {"true", "yes", "1"}:
             continue
         row = by_id.get(c["id"], {})
+        if pending.get("minimumReleaseAgeHours") == 0:
+            row = {**row, "releaseAgeRemainingHours": None}
         status = "unknown"
-        if labels.get("dockhand.update") == "false":
+        if str(labels.get("dockhand.update", labels.get("wud.watch", ""))).lower() in {"false", "no", "0"}:
             status = "excluded"
         elif row.get("pinnedToDigest") is True:
             status = "advisory"
+        elif (
+            type(row.get("releaseAgeRemainingHours")) in (int, float)
+            and row["releaseAgeRemainingHours"] > 0
+            and pending.get("minimumReleaseAgeHours") != 0
+            and row.get("hasImageUpdate") is not True
+        ):
+            status = "deferred"
         elif row.get("hasImageUpdate") is True:
             cooldown = pending.get("minimumReleaseAgeHours")
             held = (row.get("releaseAgeRemainingHours") or 0) > 0 and cooldown != 0
@@ -244,16 +413,21 @@ def normalize(containers: object, pending: object) -> list[ContainerStatus]:
         except ValueError:
             checked = None
         result.append(
-            ContainerStatus(
-                container_id=c["id"],
-                name=c["name"][:256],
-                image=str(c.get("image", ""))[:512],
-                state=str(c.get("state", "unknown"))[:40],
-                stack=str(labels["com.docker.compose.project"])[:256]
-                if labels.get("com.docker.compose.project")
-                else None,
-                status=status,
-                checked_at=checked,
+            findings(
+                ContainerStatus(
+                    container_id=c["id"],
+                    name=c["name"][:256],
+                    image=str(c.get("image", ""))[:512],
+                    state=str(c.get("state", "unknown"))[:40],
+                    stack=str(labels["com.docker.compose.project"])[:256]
+                    if labels.get("com.docker.compose.project")
+                    else None,
+                    status=status,
+                    checked_at=checked,
+                ),
+                row,
+                checked,
+                pending=True,
             )
         )
     return sorted(result, key=lambda c: (c.stack or "", c.name))
@@ -346,7 +520,7 @@ class DockhandReader:
             raise ValueError("Unmatched execution")
         return summary, scheduled_results(execution, containers, environment_id)
 
-    def request_check(self, target_id: str) -> None:
+    def request_check(self, target_id: str, *, scheduled: bool = False) -> None:
         if not self.cfg.allow_checks:
             raise PermissionError("Enable dockhand.allow_checks in Settings to allow explicit Dockhand checks")
         mapping = next((m for m in self.cfg.environments if m.target_id == target_id), None)
@@ -359,24 +533,34 @@ class DockhandReader:
         previous = self.status.get(target_id, DockhandStatus(manager_url=self.cfg.url))
         self.status[target_id] = previous.model_copy(update={"checking": True, "check_error": None})
         self.last_started[target_id] = time.monotonic()
-        self.tasks[target_id] = asyncio.create_task(self._check(target_id, mapping.environment_id))
+        self.tasks[target_id] = asyncio.create_task(self._check(target_id, mapping.environment_id, scheduled=scheduled))
 
     def _merge(self, target_id: str, items: list[ContainerStatus]) -> list[ContainerStatus]:
-        known = self.checked.get(target_id, {})
+        known = self.checked.setdefault(target_id, {})
+        identity = {"container_id", "name", "image", "state", "stack"}
         for index, item in enumerate(items):
             old = known.get(item.container_id)
-            if (
-                old
-                and item.status != "excluded"
-                and old.image == item.image
-                and (item.checked_at is None or (old.checked_at is not None and old.checked_at >= item.checked_at))
-            ):
-                items[index] = item.model_copy(
-                    update={"status": old.status, "checked_at": old.checked_at, "source": old.source}
+            if old and old.image != item.image:
+                old = None
+            if item.status == "excluded":
+                known.pop(item.container_id, None)
+                continue
+            if old and (item.checked_at is None or (old.checked_at and old.checked_at >= item.checked_at)):
+                record = item.model_copy(
+                    update={key: getattr(old, key) for key in ContainerStatus.model_fields if key not in identity}
                 )
+                # An explicit positive record without a timestamp must not be erased by an older zero.
+                if item.status == "update" and item.checked_at is None:
+                    record.image_update = True
+                    record.reported_at = None
+                items[index] = record
+            else:
+                items[index] = retain_findings(item, old)
+            if items[index].checked_at is not None or items[index].status == "update":
+                known[item.container_id] = items[index]
         return items
 
-    async def _check(self, target_id: str, environment_id: int) -> None:
+    async def _check(self, target_id: str, environment_id: int, *, scheduled: bool = False) -> None:
         try:
             # A fixed JSON endpoint returns the complete per-container result. No deployment endpoints exist here.
             async with asyncio.timeout(180):
@@ -403,6 +587,10 @@ class DockhandReader:
                 for item in items:
                     row = results.get(item.container_id)
                     if not row:
+                        item.checked_at = now
+                        item.check_issue = "missing_result"
+                        item.source = "fleetdeck_schedule" if scheduled else "fleetdeck_button"
+                        retain_findings(item, self.checked.get(target_id, {}).get(item.container_id))
                         continue
                     if row.get("error"):
                         item.status = "failed"
@@ -421,10 +609,16 @@ class DockhandReader:
                     elif row.get("hasUpdate") is False:
                         item.status = "current"
                     else:
+                        item.checked_at = now
+                        item.check_issue = "missing_result"
+                        item.source = "fleetdeck_schedule" if scheduled else "fleetdeck_button"
+                        retain_findings(item, self.checked.get(target_id, {}).get(item.container_id))
                         continue  # incomplete records are never a successful check
                     item.checked_at = now
-                    item.source = "fleetdeck_button"
-                if items and not any(item.checked_at for item in items):
+                    item.source = "fleetdeck_schedule" if scheduled else "fleetdeck_button"
+                    findings(item, row, now)
+                    retain_findings(item, self.checked.get(target_id, {}).get(item.container_id))
+                if items and not any(item.status != "unknown" for item in items):
                     raise ValueError("No complete check results matched the current container inventory")
                 self.checked[target_id] = {c.container_id: c for c in items if c.checked_at is not None}
                 self.status[target_id] = DockhandStatus(
@@ -492,7 +686,7 @@ class DockhandReader:
                             for outcome in outcomes:
                                 old = known.get(outcome.container_id)
                                 if not old or not old.checked_at or outcome.checked_at > old.checked_at:
-                                    known[outcome.container_id] = outcome
+                                    known[outcome.container_id] = retain_findings(outcome, old)
                         except (httpx.HTTPError, ValueError, TypeError, KeyError):
                             history_error = (
                                 "Dockhand check history unavailable. Check read access to schedules "

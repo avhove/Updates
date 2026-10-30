@@ -1,15 +1,17 @@
 # OS-focused dashboard preview
 
-## Container status and Dockhand (optional)
+## Container status: native Docker and optional Dockhand
 
 The dashboard keeps the **Update** button. Its scope is OS packages, identified by the
 **Operating system** group heading and the update confirmation. The separate **Containers**
-column uses a blue boxes-and-count metric, aligned with Security/Package. A server icon means
+column uses a blue boxes-and-count metric for image updates, aligned with Security/Package.
+Separate tag, information and warning metrics expose review items, coverage exceptions and failed
+checks. Clicking each opens the corresponding filter. Counts can overlap for the same container. A server icon means
 Fleetdeck management; an external-link icon means an external manager. Hover or focus names
 the manager. Clicking the metric expands container details beneath that machine; opening
 details never submits an action. The Containers tab remains available as a fleet-wide view.
 Mobile cards expose the same details and controls without adding selection controls.
-Dockhand containers share one table per machine, with a Stack column sorted alphabetically
+Both providers share a compact details panel and one table per machine, with a Stack column sorted alphabetically
 (case-insensitive, natural ordering), then by container name. Containers without Compose
 metadata are labelled Standalone and participate in that same sort. The inline machine
 details and Containers tab use the same table; narrow screens use labelled rows.
@@ -43,9 +45,72 @@ rediscovers machines and reads saved reports, even when `dockhand.allow_checks` 
 It does not trigger an OS or registry update check. Results of checks run by Dockhand appear on the next
 successful sync when exposed by its cached API; missing successful-check history remains unknown.
 Ordinary automatic polling and inventory GETs use only read-only requests: `GET /api/containers?env=ID`,
-`GET /api/containers/pending-updates?env=ID`, and the scheduled-check history described below. It never automatically triggers checks, pulls, deployments,
-pruning or restarts. It reads both Compose labels and standalone containers. **Open Dockhand**
+`GET /api/containers/pending-updates?env=ID`, and the scheduled-check history described below. These read-only polling requests never trigger checks, pulls, deployments, pruning or restarts.
+Scheduled rounds are separate and follow `schedule.check_docker` as described below. It reads both Compose labels and standalone containers. **Open Dockhand**
 opens the configured manager URL; deployment and self-update stay with that manager.
+
+### Scheduling and provider boundaries
+
+The application supports native Docker, Dockhand and a mixed fleet. Shared wording uses
+**container checks**; provider-specific controls describe the actual operation.
+
+| Requirement | Fleetdeck native Docker | Dockhand |
+| --- | --- | --- |
+| Provider enabled | `docker_enabled: true`, eligible managed/monitor host | Exact environment mapping |
+| Permission for a fresh check | Existing native policy | `dockhand.allow_checks: true` |
+| Included in Fleetdeck scheduled rounds | Also `schedule.check_docker: true` | Also `schedule.check_docker: true` |
+| Check operation | Pull Compose images to compare | Query registry digests and metadata |
+| Deploy operation | Existing confirmed **Update stack** | Open Dockhand |
+| Coverage | Compose services only | Containers exposed by Dockhand, including standalone |
+
+`schedule.check_docker: false` disables fresh container checks in Fleetdeck scheduled rounds
+for **both** providers. It does not disable explicit manual checks. `docker_enabled: false`
+continues to block native Docker checks, deployments and discovery; it does not enable native
+fallback for a Dockhand host. A Dockhand-only installation keeps that native setting false.
+Neither flag edits Dockhand's own schedule. Its independent scheduled runs continue normally.
+
+**Check all** and global **Check container updates** route to both enabled providers. If any
+native hosts participate, a confirmation explains image downloads before container checks start;
+cancelling starts neither provider's container checks. The top control's OS checks are independent.
+The per-machine menu offers separate OS and container checks. **Refresh inventory** and ordinary
+polling only discover machines and read saved reports. Opening details and changing filters never
+start checks. Manual container actions do not install updates or restart containers.
+
+Scheduled requests use the same provider guards, target mappings, concurrency and minimum-start
+interval as manual requests, skip hidden/check-only machines and never retry a refused start.
+Native monitor-only policies still permit checks but block deployment. Dockhand results remain in
+its provider status; the existing OS notification report is not extended to send Dockhand alerts.
+
+### Shared details and simultaneous findings
+
+Both the inline details and Containers tab use the same compact panel, flat table sorted by Stack
+then container/service name, and All / Review / Coverage / Failures filters. The explanation lives
+in collapsed **How checks work** help; the summary, active warnings and provider scope stay visible.
+Native controls preserve the original pull confirmation, prune preference, stack-update confirmation,
+monitor-only restrictions and dashboard self-update protection. Native checks do not provide
+standalone checks or newer-version-tag detection; the panel explicitly states those limitations.
+
+| Case | Presentation and handling |
+| --- | --- |
+| Confirmed current | Up to date and confirmed check time |
+| Image update | Blue image-update count and row finding |
+| New version tag | Purple Review count; manual tag change, separate from current-tag result |
+| Image update plus new tag | Both findings and counts, never collapsed to one status |
+| Local image | Coverage exception; no registry comparison, repeating checks cannot resolve it |
+| Policy exclusion | Coverage exception; intentionally excluded, not healthy or failed |
+| New/replaced/unmatched container | Coverage exception and no confirmed result; no healthy zero |
+| Cooldown / pinned digest | Review finding; no directly applicable image-update count |
+| Registry rate limit/auth/timeout | Separate failure; keep earlier positive update/advisory with its time |
+| Check running | Spinner and progress notice; existing results remain last-known |
+| Sync failure / unavailable history | Visible warning; keep usable saved results, missing counts stay unavailable |
+
+Independent optional fields preserve image updates, newer tags, digest pins, cooldowns, failure
+categories and finding timestamps together. The legacy status remains accepted for old saved data.
+A newer success clears obsolete findings; a failed or partial result cannot erase a previously
+confirmed positive finding for the same container ID and image. Unknown or failed current-tag
+checks never become green just because an earlier result was current. Raw errors/logs/tokens are
+not exposed; error categories use fixed labels. Cached-result identity, timestamp and permission
+safeguards remain in force.
 
 ### Automatic history sync and the Docker panel explanation
 
@@ -63,8 +128,8 @@ The Docker details panel explains the mechanism directly:
   A successful run with container errors is labelled as having errors, never blanket success.
 - **Last checked**: a container's confirmed result time, with a tooltip identifying its source.
 - **Check in Dockhand**: the existing opt-in, confirmed request for a fresh registry check.
-  **Check all** requests OS and Dockhand checks; the dashboard container-only menu requests Dockhand checks only.
-  It queries registry digests and metadata; it does not download image layers, change schedules,
+  **Check all** requests OS and enabled container-provider checks; the dashboard container-only
+  menu requests container checks through each machine’s provider. Dockhand queries registry digests and metadata; it does not download image layers, change schedules,
   deploy images or restart containers.
 - **Unknown / No confirmed check result**: no result can be reliably matched to this container.
   An empty pending list is never converted to an up-to-date result.
@@ -82,8 +147,10 @@ key scoped to manager URL, environment ID and Fleetdeck target ID; tokens are ne
 this cache. Retired container records are pruned on sync. Corrupt cache records are ignored,
 remapped environments cannot inherit them, and an in-flight check is never resumed. Without
 persistent state storage the panel explicitly explains that results last only until restart.
-Dockhand remains the only automatic check scheduler. Ordinary dashboard polling and individual
-OS checks never press the Dockhand button. With `allow_checks: true`, manual controls have these scopes:
+Dockhand retains its own schedule. Ordinary dashboard polling and individual OS checks never
+press the Dockhand button. Fleetdeck can additionally include provider checks in its own scheduled
+rounds when the overall `schedule.check_docker` flag is true. With `allow_checks: true`,
+manual Dockhand controls have these scopes:
 
 | Control | OS checks | Fresh Dockhand digest checks |
 | --- | --- | --- |
@@ -96,7 +163,8 @@ OS checks never press the Dockhand button. With `allow_checks: true`, manual con
 | Per-machine **Update** | Installs OS packages | No |
 
 The container-only menu entry is disabled when explicit checks are not enabled, and is hidden
-when there are no visible mapped Dockhand machines. Check requests skip hidden machines and
+when there are no visible container hosts. Native hosts use their original confirmed check workflow;
+Dockhand hosts use their mapped environment. Check requests skip hidden machines and
 checks already running. All writes use the authenticated, CSRF-protected `POST /api/dockhand/check`
 endpoint for exact mapped IDs. No native Docker jobs are submitted by these Dockhand controls. The existing four-check and thirty-second limits still
 apply; checks that cannot start are reported visibly and never automatically retried. The ordinary dashboard's time header is **OS checked**.
@@ -121,7 +189,8 @@ containers, prune, restart or change native Docker
 policy. Each request runs in the background with a three-minute bound. The UI shows **Checking…**
 while the complete result is pending; no artificial progress counts are displayed. Checks are
 limited to one per environment, four globally, and at least thirty seconds between starts.
-They are never automatically retried, scheduled, or resumed after a Fleetdeck restart.
+They are never automatically retried or resumed after a Fleetdeck restart. Fleetdeck scheduled
+rounds can request them only when both `schedule.check_docker` and `dockhand.allow_checks` are true.
 
 Successful `hasUpdate: false` results can establish **Up to date**, with a check timestamp.
 Failures, local-only images, exclusions, advisories and cooldowns remain distinct. Source error
@@ -157,10 +226,10 @@ name; the second line contains only the OS. The machine column takes all remaini
 content budgets: 78 px for an icon and four-digit count, 158 px for the longest standard status
 (`updating Docker…`), 96 px for an 84 px action button and padding, 62 px for Reboot,
 88 px for relative backup/check ages such as `59 min ago`, 40 px for the backup job icon,
-124 px for the container count and manager symbol, 60 px for Info plus a repository warning,
+144 px for the container indicators and manager symbol, 60 px for Info plus a repository warning,
 and 44 px for More. Counts and week ages are not bounded; unusually large values truncate
 within their cell with the full value available through a tooltip or accessible control label.
-Long machine names also retain their full hover text. Cards start below 1380 px so names
+Long machine names also retain their full hover text. Cards start below 1400 px so names
 are not squeezed to preserve the desktop table.
 
 Backups groups Latest and Job; Operating system groups Security, Packages, Phased, Reboot,
@@ -178,7 +247,8 @@ The detail table says **No confirmed check result** when no reliable outcome is 
 Version/pinned-digest advisories, policy exclusions and deferred updates are separate statuses;
 only explicit `hasImageUpdate: true` records outside cooldown count as updates. Report times
 describe Dockhand's cached records, not a new registry check by Fleetdeck. Poll failures retain
-the last successful inventory with a stale notice and a `?` metric. Saved results are restored
+the last successful inventory with a stale notice and muted last-known counts. With no usable
+results, the update metric shows `—`; coverage and failure indicators explain why. Saved results are restored
 stale after a restart, then reconciled with current inventory. No source error bodies or tokens are sent to the browser.
 
 For mixed management, explicitly enable `docker_enabled: true` for Fleetdeck's existing native
@@ -190,7 +260,7 @@ Do not enable native management in a Dockhand-only configuration.
 
 Fleetdeck's native implementation still checks Compose stacks only. Its metric counts
 outdated running services, not stacks, and its action remains **Update stack** with the existing
-confirmation and protections. No Compose stacks means `?`, not a healthy zero. Even when a
+confirmation and protections. No Compose stacks means `—`, not a healthy zero. Even when a
 Compose result is current, the detail panel states that standalone containers are outside its
 coverage. Rebooting a machine interrupts its containers regardless of manager.
 
@@ -450,3 +520,14 @@ precedence, separate dashboard and per-machine menu scopes, combined top checks,
 refresh/polling and OS-only installs.
 Ruff and diff checks pass. Browser review uses only local simulated machines; no live Dockhand
 instance or homelab host is contacted.
+
+### Shared-provider follow-up verification
+
+The provider scheduling, compound findings and shared UI revision passes 114 focused backend tests
+(one existing skip and one Linux boot-ID test deselected), plus 42 offline UI tests and 5 additional native-job guard tests. The tests cover
+the overall flag with native enabled/disabled and Dockhand allowed/blocked, mixed-provider manual
+checks and cancellation, native deployment guards, overlapping findings, retention after failure,
+missing-result coverage and read-only polling. Browser review uses local simulated providers only.
+
+Desktop geometry was checked at 1400 and 1440 px, with labelled container rows at 390 px.
+Both providers fit without page overflow. No real machines, registry or Dockhand instance were contacted.

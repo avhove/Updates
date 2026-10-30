@@ -53,13 +53,14 @@ async function dashboard({ docker = false, containers = false, dockhandChecks = 
       return { ok: true, json: async () => body };
     },
     location: { hostname: "localhost", protocol: "http:", pathname: "/" },
-    matchMedia: (query) => query === "(max-width: 1379px)" ? mobileQuery : { matches: false }, addEventListener: window.addEventListener.bind(window),
+    matchMedia: (query) => query === "(max-width: 1399px)" ? mobileQuery : { matches: false }, addEventListener: window.addEventListener.bind(window),
   };
   const context = vm.createContext(sandbox);
   vm.runInContext(read("format.js"), context);
   vm.runInContext(read("tools.js"), context);
   vm.runInContext(read("theme.js"), context);
   window.dispatchEvent(new window.Event("DOMContentLoaded"));
+  vm.runInContext(read("containers.js"), context);
   vm.runInContext(read("app.js"), context);
   vm.runInContext("globalThis.ui = {state, render, load, openMachineMenu, setView}", context);
   await flush();
@@ -609,10 +610,10 @@ test("optional Docker status is separate, honest about failed checks, and never 
   assert.equal(dockerTable.classList.contains("has-backup"), true);
   assert.equal(dockerTable.classList.contains("has-containers"), true);
   assert.equal(dockerTable.querySelectorAll("colgroup > col").length, 14);
-  assert.equal(ui.document.querySelectorAll("[data-open-docker]").length, 1);
+  assert.equal(ui.document.querySelectorAll('[data-open-docker][data-container-filter="all"]').length, 1);
   ui.click('[data-open-docker="docker-vm"]');
   assert.equal(ui.document.querySelector("#groups").hidden, false);
-  assert.match(ui.document.querySelector(".container-detail").textContent, /unknown · check failed/);
+  assert.match(ui.document.querySelector(".container-detail").textContent, /Stack image check failed/);
   assert.equal(ui.document.querySelector('[data-open-docker="docker-vm"]').getAttribute('aria-expanded'), 'true');
   assert.equal(ui.document.querySelectorAll("[data-stack]").length, 0);
   assert.equal(ui.calls.some((call) => call.path === "/api/actions"), false);
@@ -672,7 +673,7 @@ test("native Docker counts services, distinguishes missing Compose coverage and 
     machine('empty', { view: { stacks: { ...stacks, stacks: [] } } }),
   ] });
   assert.match(ui.document.querySelector('[data-open-docker="native"]').textContent, /2/);
-  assert.match(ui.document.querySelector('[data-open-docker="empty"]').textContent, /\?/);
+  assert.match(ui.document.querySelector('[data-open-docker="empty"]').textContent, /—/);
   ui.click('[data-open-docker="empty"]');
   assert.match(ui.document.querySelector('.container-detail').textContent, /Standalone containers are not checked/);
   assert.match(ui.document.querySelector('.scope-headings').textContent, /Operating system.*Containers/);
@@ -689,9 +690,9 @@ test("a failed Dockhand sync shows unknown while retaining last-known results", 
       { name: 'old', image: 'old:latest', state: 'running', status: 'update', stack: null, checked_at: now },
     ] },
   } })] });
-  assert.match(ui.document.querySelector('[data-open-docker="stale"]').textContent, /\?/);
+  assert.match(ui.document.querySelector('[data-open-docker="stale"]').textContent, /1/);
   ui.click('[data-open-docker="stale"]');
-  assert.match(ui.document.querySelector('.container-detail').textContent, /Last-known results.*stale/);
+  assert.match(ui.document.querySelector('.container-detail').textContent, /last-known results/);
   assert.match(ui.document.querySelector('.container-detail').textContent, /old:latest/);
   assert.equal(ui.calls.some(c => c.path === '/api/actions'), false);
 });
@@ -725,7 +726,7 @@ test("Dockhand checks require opt-in and confirmation, then use only the mapped 
   target.dockhand.checking = true;
   ui.render();
   assert.equal(ui.document.querySelector('[data-dockhand-check]').disabled, true);
-  assert.match(ui.document.querySelector('.container-detail').textContent, /Checking image updates/);
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Checking container images/);
   target.dockhand.checking = false;
   target.dockhand.last_check_at = now;
   target.dockhand.containers[0].status = 'current';
@@ -735,7 +736,7 @@ test("Dockhand checks require opt-in and confirmation, then use only the mapped 
   target.dockhand.containers[0].status = 'failed';
   ui.render();
   assert.match(ui.document.querySelector('.container-detail').textContent, /Check failed/);
-  assert.match(ui.document.querySelector('[data-open-docker]').textContent, /\?/);
+  assert.match(ui.document.querySelector('[data-open-docker]').textContent, /—/);
   assert.deepEqual(ui.errors, []);
 });
 
@@ -810,8 +811,8 @@ test("Dockhand explains read-only sync, saved history and explicit fresh checks 
     } })] });
     ui.click('[data-open-docker="docker"]');
     const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
-    assert.match(panel.textContent, /Dockhand owns the scheduled checks/);
-    assert.match(panel.textContent, /automatic dashboard polling reads saved reports without starting new checks/);
+    assert.match(panel.textContent, /Dockhand owns its own schedule/);
+    assert.match(panel.textContent, /Automatic dashboard polling and Refresh inventory read saved reports/);
     assert.match(panel.textContent, /saved across Fleetdeck restarts/);
     assert.match(panel.textContent, /Completed with 1 check error/);
     assert.match(panel.textContent, /no result could be reliably matched/);
@@ -932,6 +933,122 @@ test("native container menu keeps its pull confirmation and disappears when Dock
     ui.click('#machine-actions [data-act="stacks"]');
     assert.equal(ui.document.querySelector('#confirm').open, true);
     assert.match(ui.document.querySelector('#confirm-text').textContent, /pull|download/i);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
+});
+
+test("compound container indicators preserve updates, version advisories, coverage and failures independently", async () => {
+  const rows = [
+    { name: 'both', stack: 'app', image: 'example/app:1', state: 'running', status: 'update', image_update: true, newer_version: '2', advisory: true, checked_at: now },
+    { name: 'failed-known', image: 'example/known:1', state: 'running', status: 'failed', image_update: true, newer_version: '2', check_issue: 'rate_limit', reported_at: '2026-01-01T00:00:00Z', checked_at: now },
+    { name: 'local', image: 'fleetdeck-local:ui-v1', state: 'running', status: 'local', checked_at: now },
+    { name: 'excluded', image: 'example/excluded:1', state: 'running', status: 'excluded' },
+    { name: 'replacement', image: 'example/new:1', state: 'running', status: 'unknown' },
+    { name: 'held', image: 'example/held:1', state: 'running', status: 'deferred', image_update: false, deferred_hours: 6, checked_at: now },
+    { name: 'pinned', image: 'example/pinned:1@sha256:demo', state: 'running', status: 'advisory', image_update: false, pinned_digest: true, checked_at: now },
+  ];
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ containers: true, mobile, targets: [machine('mixed', { view: {
+      dockhand: { synced_at: now, stale: false, containers: rows }, docker_settings: { mode: 'external', manager_name: 'Dockhand' },
+    } })] });
+    const badge = filter => ui.document.querySelector(`[data-open-docker="mixed"][data-container-filter="${filter}"]`);
+    assert.equal(badge('all').textContent, '2');
+    assert.equal(badge('review').textContent, '4');
+    assert.equal(badge('coverage').textContent, '3');
+    assert.equal(badge('failures').textContent, '1');
+    ui.click('[data-open-docker="mixed"][data-container-filter="review"]');
+    const selector = mobile ? '.mc-container-panel' : '.container-detail';
+    let panel = ui.document.querySelector(selector);
+    assert.equal(panel.querySelectorAll('.container-results-table tbody tr').length, 4);
+    assert.match(panel.textContent, /Newer version: 2/);
+    assert.match(panel.textContent, /Pinned digest moved/);
+    assert.match(panel.textContent, /6 h cooldown/);
+    assert.equal(panel.querySelector('.container-help').hasAttribute('open'), false);
+    ui.click(`${selector} [data-container-view-filter="failures"]`);
+    panel = ui.document.querySelector(selector);
+    assert.equal(panel.querySelectorAll('.container-results-table tbody tr').length, 1);
+    assert.match(panel.textContent, /Image update reported.*last known/);
+    assert.match(panel.textContent, /registry rate limit/);
+    ui.click(`${selector} [data-container-view-filter="coverage"]`);
+    panel = ui.document.querySelector(selector);
+    assert.equal(panel.querySelectorAll('.container-results-table tbody tr').length, 3);
+    assert.match(panel.textContent, /no registry comparison/);
+    assert.match(panel.textContent, /Excluded by policy/);
+    assert.match(panel.textContent, /No confirmed check result/);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
+});
+
+test("local-only and offline cases keep coverage and connection separate from counts", async () => {
+  const ui = await dashboard({ containers: true, targets: [
+    machine('healthy-local', { view: { dockhand: { stale: false, containers: [
+      { name: 'good', image: 'good:latest', status: 'current', checked_at: now },
+      { name: 'local', image: 'local:1', status: 'local', checked_at: now },
+    ] } } }),
+    machine('unreachable', { view: { dockhand: { stale: true, error: 'Cannot connect', containers: [] } } }),
+    machine('checking', { view: { dockhand: { checking: true, stale: false, containers: [
+      { name: 'old', image: 'old:1', status: 'update', checked_at: now },
+    ] } } }),
+  ] });
+  assert.equal(ui.document.querySelector('[data-open-docker="healthy-local"][data-container-filter="all"]').textContent, '0');
+  assert.equal(ui.document.querySelector('[data-open-docker="healthy-local"][data-container-filter="coverage"]').textContent, '1');
+  assert.match(ui.document.querySelector('[data-open-docker="unreachable"]').textContent, /—/);
+  assert.ok(ui.document.querySelector('[data-open-docker="checking"] .update-metric'));
+  ui.click('[data-open-docker="checking"]');
+  assert.match(ui.document.querySelector('.container-detail').textContent, /Previous results remain last-known/);
+});
+
+test("mixed-provider bulk checks require native pull confirmation and preserve each provider scope", async () => {
+  const stacks = { docker: 'yes', compose: 'v2', checked_at: now, stacks: [
+    { name: 'app', state: 'running', update_available: true, services: [
+      { name: 'web', image: 'example/web:1', status: 'running', outdated: true },
+    ] },
+  ] };
+  const targets = [machine('native', { check: { docker_installed: true }, view: { stacks } }),
+    machine('external', { view: { dockhand: { stale: false, containers: [] }, docker_settings: { mode: 'external' } } })];
+  const ui = await dashboard({ docker: true, containers: true, dockhandChecks: true, targets });
+  assert.equal(ui.document.querySelector('#check-containers').disabled, false);
+  await ui.document.querySelector('#check-containers').onclick();
+  assert.match(ui.document.querySelector('#confirm-text').textContent, /download \(pull\).*Dockhand/i);
+  assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  const dialog = ui.document.querySelector('#confirm');
+  dialog.returnValue = 'cancel'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+  assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  await ui.document.querySelector('#check-containers').onclick();
+  dialog.returnValue = 'ok'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+  const native = ui.calls.find(c => c.path === '/api/actions');
+  assert.equal(JSON.parse(native.body).action, 'stacks');
+  assert.deepEqual(JSON.parse(native.body).target_ids, ['native']);
+  const external = ui.calls.find(c => c.path === '/api/dockhand/check');
+  assert.deepEqual(JSON.parse(external.body), { target_id: 'external' });
+  ui.click('[data-open-docker="native"]');
+  const detail = ui.document.querySelector('.container-detail');
+  assert.match(detail.textContent, /Fleetdeck native/);
+  assert.match(detail.textContent, /Standalone containers are outside/);
+  assert.match(detail.textContent, /newer-version-tag advisories are not provided/);
+  assert.ok(detail.querySelector('[data-stack="app"]'));
+  assert.equal(detail.querySelector('[data-dockhand-check]'), null);
+});
+
+
+test("shared native details keep monitor, check-only and dashboard deployment guards", async () => {
+  const stack = { name: 'app', state: 'running', update_available: true, services: [
+    { name: 'web', image: 'web:1', status: 'running', outdated: true },
+  ] };
+  for (const variant of ['monitor', 'check-only', 'dashboard', 'blocked']) {
+    const target = machine('native', { target: { check_only: variant === 'check-only' },
+      check: { docker_installed: true }, view: {
+        monitor_only: variant === 'monitor', blocked: variant === 'blocked' ? 'Host busy' : null,
+        docker_settings: { mode: variant === 'monitor' ? 'monitor' : 'managed' },
+        stacks: { docker: 'yes', compose: 'v2', checked_at: now, stacks: [{ ...stack, is_dashboard: variant === 'dashboard' }] },
+      } });
+    const ui = await dashboard({ docker: true, containers: true, targets: [target] });
+    ui.click('[data-open-docker="native"]');
+    const panel = ui.document.querySelector('.container-detail');
+    const deploy = panel.querySelector('[data-stack="app"]');
+    assert.ok(!deploy || deploy.disabled, variant);
+    if (variant === 'dashboard') assert.match(panel.textContent, /Update externally/);
+    if (variant === 'check-only') assert.equal(panel.querySelector('[data-act="stacks"]').disabled, true);
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
   }
 });

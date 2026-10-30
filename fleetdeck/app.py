@@ -157,8 +157,9 @@ def create_app(
         jobs,
         notifier,
         store,
-        cfg.docker_enabled and cfg.schedule.check_docker,
+        cfg.schedule.check_docker,
         cfg.schedule.auto_security_updates,
+        dockhand=dockhand,
     )
 
     @asynccontextmanager
@@ -274,6 +275,7 @@ def create_app(
                 "containers_visible": bool(cfg.docker_enabled or cfg.dockhand),
                 "dockhand_checks_allowed": bool(cfg.dockhand and cfg.dockhand.allow_checks),
                 "dockhand_results_persistent": store is not None,
+                "scheduled_container_checks": cfg.schedule.check_docker,
             },
         }
 
@@ -412,6 +414,7 @@ def create_app(
     async def schedule():
         return {
             "check_every": scheduler.interval,
+            "check_docker": scheduler.check_docker,
             "next_run": scheduler.next_run,
             "last_run": scheduler.last_run,
             "last_notified": scheduler.last_notified,

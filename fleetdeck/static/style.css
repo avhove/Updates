@@ -468,16 +468,16 @@ button.login-submit.busy .login-spinner { display: inline-block; }
 .container-detail > td { padding: 12px 16px; background: var(--panel-2); white-space: normal; }
 .container-detail .docker-host { margin: 0; }
 .container-section-title { padding: 8px 18px 0; }
-.dockhand-table { table-layout: fixed; min-width: 600px; }
-.dockhand-table col.dh-name { width: 22%; }
-.dockhand-table col.dh-stack { width: 18%; }
-.dockhand-table col.dh-image { width: 25%; }
-.dockhand-table col.dh-status { width: 25%; }
-.dockhand-table col.dh-report { width: 10%; }
+.container-results-table { table-layout: fixed; min-width: 600px; }
+.container-results-table col.cr-name { width: 22%; }
+.container-results-table col.cr-stack { width: 18%; }
+.container-results-table col.cr-image { width: 25%; }
+.container-results-table col.cr-status { width: 25%; }
+.container-results-table col.cr-checked { width: 10%; }
 /* The generic 1% first column is for machine selection, not container names. */
-.dockhand-table th:first-child, .dockhand-table td:first-child { width: auto; }
-.dockhand-table .dockhand-name { font-weight: 500; }
-.dockhand-table td { overflow-wrap: anywhere; white-space: normal; }
+.container-results-table th:first-child, .container-results-table td:first-child { width: auto; }
+.container-results-table .container-name { font-weight: 500; }
+.container-results-table td { overflow-wrap: anywhere; white-space: normal; }
 .mc-container-panel { min-width: 0; }
 .mc-container-panel .group { background: var(--panel) !important; border: 1px solid var(--border) !important; }
 .mc-containers { display: flex; align-items: center; gap: 12px; font-size: 12px; }
@@ -551,8 +551,8 @@ a.brand { color: var(--text); text-decoration: none; }
    Names receive all remaining width. Pathological names/counts retain full labels. */
 .dashboard-page .machine-table { min-width: 1072px; table-layout: fixed; }
 .dashboard-page .machine-table.has-backup { min-width: 1200px; }
-.dashboard-page .machine-table.has-containers { min-width: 1196px; }
-.dashboard-page .machine-table.has-backup.has-containers { min-width: 1324px; }
+.dashboard-page .machine-table.has-containers { min-width: 1216px; }
+.dashboard-page .machine-table.has-backup.has-containers { min-width: 1344px; }
 .dashboard-page .machine-table col.col-select { width: 30px; }
 .dashboard-page .machine-table col.col-machine { width: auto; }
 .dashboard-page .machine-table col.col-backup { width: 88px; }
@@ -564,7 +564,7 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .machine-table col.col-checked { width: 88px; }
 .dashboard-page .machine-table col.col-info { width: 60px; }
 .dashboard-page .machine-table col.col-more { width: 44px; }
-.dashboard-page .machine-table col.col-containers { width: 124px; }
+.dashboard-page .machine-table col.col-containers { width: 144px; }
 .dashboard-page .machine-table > thead > tr > th { white-space: nowrap; padding-inline: 6px; letter-spacing: 0; vertical-align: middle; }
 .dashboard-page .machine-table > tbody > .machine-row > td { height: 62px; padding: 8px 6px; white-space: nowrap; }
 .dashboard-page .machine-table > tbody > .machine-row > td:first-child { padding-left: 14px; padding-right: 5px; }
@@ -716,13 +716,13 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .docker-host tr:not(.pkgs) > td.actions { grid-column: 3; }
   .dashboard-page .docker-host td[data-label] { grid-column: 1 / -1; }
   /* Dockhand rows become labelled cards, independently of the legacy machine-table grid. */
-  .dashboard-page .group table.dockhand-table { min-width: 0; width: 100%; }
-  .dashboard-page .dockhand-table colgroup { display: none; }
-  .dashboard-page .group .dockhand-table tr:not(.pkgs) { display: block; padding: 12px 16px; }
-  .dashboard-page .group .dockhand-table tr:not(.pkgs) > td { display: block; width: auto; padding: 4px 0; }
-  .dashboard-page .group .dockhand-table tr:not(.pkgs) > td[data-label] { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; }
-  .dashboard-page .dockhand-table td[data-label]::before { min-width: 0; align-self: start; }
-  .dashboard-page .dockhand-table .dockhand-name { margin-bottom: 4px; }
+  .dashboard-page .group table.container-results-table { min-width: 0; width: 100%; }
+  .dashboard-page .container-results-table colgroup { display: none; }
+  .dashboard-page .group .container-results-table tr:not(.pkgs) { display: block; padding: 12px 16px; }
+  .dashboard-page .group .container-results-table tr:not(.pkgs) > td { display: block; width: auto; padding: 4px 0; }
+  .dashboard-page .group .container-results-table tr:not(.pkgs) > td[data-label] { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; }
+  .dashboard-page .container-results-table td[data-label]::before { min-width: 0; align-self: start; }
+  .dashboard-page .container-results-table .container-name { margin-bottom: 4px; }
 }
 @media (max-width: 520px) {
   .dashboard-page > header { position: static; flex-wrap: nowrap; padding: 10px; gap: 8px; }
@@ -847,3 +847,32 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .monitor-policy .ui-icon { width: 14px; height: 14px; }
 .mc-card .machine-main:has(.monitor-policy) { flex-wrap: nowrap; }
 .mc-card .machine-main:has(.monitor-policy) .machine-name { flex: 0 1 auto; }
+
+/* Provider-neutral container indicators and compact, shared details. */
+.container-indicators { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 4px; max-width: 132px; margin: auto; }
+.dashboard-page .container-indicator.container-metric-hit { min-width: 28px; min-height: 32px; }
+.container-indicators .container-manager-symbol { position: static; transform: none; padding: 2px; }
+.container-indicators .update-metric { gap: 4px; }
+.container-indicators .update-metric .ui-icon { width: 14px; height: 14px; }
+.container-review-tone { color: var(--accent); }
+.container-indicators .container-review { color: var(--accent); background: var(--accent-soft); }
+.container-indicators .container-coverage { color: var(--muted); background: var(--chip); }
+.container-indicators .container-failure { color: var(--bad); background: color-mix(in srgb, var(--bad) 11%, var(--panel)); }
+.container-indicators .container-notice { color: var(--warn); background: color-mix(in srgb, var(--warn) 11%, var(--panel)); }
+.container-indicators .last-known { opacity: .6; }
+.container-overview { padding: 12px 16px 0; }
+.container-sync { margin: 0 0 7px; font-size: 12px; }
+.container-summary { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.container-notice-line { margin: 8px 0; padding: 8px 10px; background: var(--chip); border-radius: 6px; font-size: 12px; }
+.container-help { margin: 8px 0 10px; font-size: 12px; color: var(--muted); }
+.container-help > summary { width: fit-content; padding: 4px 0; }
+.container-help p { max-width: 100ch; margin: 7px 0; }
+.container-filters { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 0; }
+.container-filters button { font-size: 12px; min-height: 32px; padding: 4px 8px; }
+.container-filters button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); border-color: transparent; }
+.container-result { display: flex; align-items: flex-start; gap: 5px; margin: 3px 0; }
+.container-result .ui-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; }
+.container-empty { margin: 0; padding: 12px 16px; }
+.container-results-table .cr-action { width: 110px; }
+.container-prune { display: flex; flex-direction: row; font-weight: 400; align-items: center; gap: 7px; font-size: 12px; margin: 8px 0; }
+@media (pointer: coarse) { .dashboard-page .container-indicator.container-metric-hit, .container-filters button { min-width: 44px; min-height: 44px; } }
