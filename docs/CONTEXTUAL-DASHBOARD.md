@@ -780,3 +780,9 @@ Verification: all 69 offline UI tests pass. Local browser review with coarse-poi
 explicitly enabled measured zero top offset between name/status and a retained 44px hit area.
 320px layout has no horizontal page overflow. This is a simulated touch-layout check, not a test
 on a physical iPhone.
+
+Mobile identity follow-up: additional dashboard/helper/monitor badges now sit with machine type and
+OS metadata, so they cannot squeeze a short machine name onto multiple lines. Link-only external
+rows omit the redundant Not monitored / Not applicable values and compact their empty time row.
+Their status and provider tooltips now say Monitored externally, using the configured manager name.
+All 70 offline UI tests pass, including badge placement and neutral external-manager rows.

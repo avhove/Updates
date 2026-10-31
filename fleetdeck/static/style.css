@@ -1194,3 +1194,13 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .mc-card .os-status-hit::before, .dashboard-page .mc-card .container-status-hit::before { content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
   .dashboard-page .mc-card .os-status-hit:active, .dashboard-page .mc-card .container-status-hit:active { transform:none; }
 }
+
+/* Identity badges must not take width away from the machine name. */
+@media(max-width:1119px) {
+  .dashboard-page .mc-card .machine-name { overflow-wrap:break-word; }
+  .dashboard-page .mc-card .machine-meta { flex-wrap:wrap; }
+  .dashboard-page .mc-card .machine-meta .chip { flex:none; }
+  .dashboard-page .mc-card .mc-container-check:empty { display:none; }
+  .dashboard-page .mc-card .mc-containers:has(> .mc-container-check:empty) > .mc-scope-title { grid-row:1; }
+  .dashboard-page .mc-card .mc-containers:has(> .mc-container-check:empty) > .scope-actions { grid-row:2; }
+}

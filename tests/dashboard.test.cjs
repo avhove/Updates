@@ -767,7 +767,7 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
     const row = ui.document.querySelector('[data-machine-row="appliance"]');
     const badge = row.querySelector('.monitor-policy[aria-label="Monitor only"]');
     assert.ok(badge);
-    assert.equal(badge.previousElementSibling.classList.contains(mobile ? "machine-name" : "type-chip"), true);
+    assert.equal(badge.previousElementSibling.classList.contains(mobile ? "machine-os" : "type-chip"), true);
     assert.equal(badge.nextElementSibling, null);
     assert.equal(badge.textContent.trim(), "");
     ui.informationTrigger('appliance'); ui.click('[data-machine-info=\"appliance\"]');
@@ -1582,7 +1582,7 @@ test("link-only managers have no monitoring controls or cached native update cou
       stacks: { checked_at: now, docker: 'Docker', stacks: [{ name: 'old', services: [{ name: 'old', image: 'old:latest', status: 'running', outdated: true }] }] } } });
     const ui = await dashboard({ targets: [target], mobile });
     const doc = ui.document;
-    assert.match(doc.querySelector('[data-machine-row="other-manager"]').parentNode.textContent, /Not monitored/);
+    assert.doesNotMatch(doc.querySelector('[data-machine-row="other-manager"]').parentNode.textContent, /Not monitored|Not applicable/);
     assert.equal(doc.querySelectorAll('.container-metric-hit').length, 0);
     const managerLink = doc.querySelector('a.docker-status-link');
     assert.equal(managerLink.getAttribute('href'), 'https://manager.example');
@@ -1629,4 +1629,13 @@ test("mobile identity puts machine type beside OS while OS and container actions
   assert.ok(card.querySelector('.mc-os-scope [data-menu-scope="machine"]'));
   assert.ok(card.querySelector('.mc-containers [data-menu-scope="containers"]'));
   assert.equal(card.querySelector('.mc-containers [data-act="upgrade"]'), null);
+});
+
+test("mobile name width is independent of dashboard and monitor badges", async () => {
+  const ui = await dashboard({ mobile: true, targets: [machine('docker-1', { guest: true, view: { runs_dashboard: true, monitor_only: true } })] });
+  const card = ui.document.querySelector('.mc-card');
+  assert.equal(card.querySelector('.machine-main').textContent, 'docker-1');
+  assert.equal(card.querySelector('.machine-main .chip'), null);
+  assert.match(card.querySelector('.machine-meta').textContent, /VM.*dashboard/);
+  assert.ok(card.querySelector('.machine-meta .monitor-policy'));
 });

@@ -48,7 +48,7 @@ function containerStatus(v) {
   const policy = dockerSettings(v), s = containerSummary(v);
   let symbol = "help", label = "Not checked", tone = "muted";
   if (policy.mode === "disabled") label = "Disabled";
-  else if (!v.dockhand && !dockerEnabled(v)) { symbol = "external"; label = "Managed externally"; }
+  else if (!v.dockhand && !dockerEnabled(v)) { symbol = "external"; label = "Monitored externally"; }
   else if (s.checking) return '<span class="status-inline muted"><span class="spin"></span>Checking containers…</span>';
   else if (s.error || s.checkError) { symbol = "alert"; label = "Check unavailable"; tone = "bad"; }
   else if (s.stale && s.rows.length) { symbol = "clock"; label = "Last-known results"; }
@@ -64,7 +64,7 @@ function containerStatus(v) {
 function containerCheckTime(v, withLabel = false) {
   const policy = dockerSettings(v), s = containerSummary(v);
   if (policy.mode === "disabled") return '<span class="muted">Disabled</span>';
-  if (!v.dockhand && !dockerEnabled(v)) return '<span class="muted" title="Fleetdeck does not check this external manager">Not applicable</span>';
+  if (!v.dockhand && !dockerEnabled(v)) return "";
   const relevant = s.rows.filter(r => !["local", "excluded"].includes(r.status));
   const dated = relevant.filter(r => r.checked_at && Number.isFinite(Date.parse(r.checked_at)));
   const times = dated.map(r => Date.parse(r.checked_at));
@@ -90,7 +90,7 @@ function containerRowAction(v) {
 
 function containerScope(v) {
   const policy = dockerSettings(v), external = !!v.dockhand || policy.mode === "external";
-  const manager = policy.mode === "disabled" ? "Container checks disabled" : external ? `Managed externally by ${policy.manager_name || "manager"}` : "Fleetdeck native Docker · Compose only";
+  const manager = policy.mode === "disabled" ? "Container checks disabled" : external ? `Monitored externally by ${policy.manager_name || "manager"}` : "Fleetdeck native Docker · Compose only";
   return `Containers<span class="scope-provider" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(external ? "external" : "server")}</span>`;
 }
 
@@ -99,9 +99,9 @@ function dockerCell(v, withManager = true) {
   const empty = filter => `<span class="metric-slot-empty" data-metric-slot="${filter}" aria-hidden="true"></span>`;
   const policy = dockerSettings(v);
   if (policy.mode === "disabled") return `<span class="container-indicators">${["all", "review", "coverage", "failures"].map(empty).join("")}</span>`;
-  if (!v.dockhand && !dockerEnabled(v)) return '<span class="muted" title="Link-only manager: Fleetdeck does not receive container update results">Not monitored</span>';
+  if (!v.dockhand && !dockerEnabled(v)) return "";
   const s = containerSummary(v), id = esc(v.target.id), selected = state.containerFilters?.[v.target.id] || "all";
-  const manager = s.provider === "dockhand" ? "Managed externally by Dockhand" : "Managed by Fleetdeck native Docker";
+  const manager = s.provider === "dockhand" ? "Monitored externally by Dockhand" : "Managed by Fleetdeck native Docker";
   const badge = (filter, symbol, value, label, tone) => `<button class="container-metric-hit container-indicator ${tone || ""}" data-open-docker="${id}" data-container-filter="${filter}" data-focus-key="docker:${id}:${filter}:${symbol}" aria-expanded="${state.containerExpanded.has(v.target.id) && selected === filter}" title="${esc(label)}" aria-label="${esc(`${label}. ${manager}. View container details`)}"><span class="update-metric ${tone || ""}">${symbol === "spin" ? '<span class="spin"></span>' : icon(symbol)}${value === null ? "" : `<span>${value}</span>`}</span></button>`;
   const label = s.usable ? `${s.updates} ${plural(s.updates, "container with an image update", "containers with image updates")}${s.stale ? " · last-known results" : ""}` : "Container update count unavailable";
   let body = badge("updates", "container", s.value, label, `container${s.stale ? " last-known" : ""}${s.unknown ? " unknown" : ""}`);
