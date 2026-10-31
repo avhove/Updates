@@ -767,7 +767,7 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
     const row = ui.document.querySelector('[data-machine-row="appliance"]');
     const badge = row.querySelector('.monitor-policy[aria-label="Monitor only"]');
     assert.ok(badge);
-    assert.equal(badge.previousElementSibling.classList.contains("type-chip"), true);
+    assert.equal(badge.previousElementSibling.classList.contains(mobile ? "machine-name" : "type-chip"), true);
     assert.equal(badge.nextElementSibling, null);
     assert.equal(badge.textContent.trim(), "");
     ui.informationTrigger('appliance'); ui.click('[data-machine-info=\"appliance\"]');
@@ -1615,4 +1615,18 @@ test("native container menus keep monitor control and external managers without 
   const row = ui.document.querySelector('.container-row[data-machine-row="no-link"]') || ui.document.querySelector('[data-machine-row="no-link"]').parentNode.querySelector('.container-row');
   assert.equal(row.querySelector('.scope-actions [data-docker-settings], .scope-actions a'), null);
   assert.match(row.querySelector('.scope-actions').textContent, /External manager/);
+});
+
+test("mobile identity puts machine type beside OS while OS and container actions remain separate", async () => {
+  const ui = await dashboard({ mobile: true, rememberedView: 'all', targets: [machine('classic-mobile', { guest: true,
+    check: { os: 'Debian 13', packages: [{ name: 'curl', current: '1', available: '2' }] },
+    view: { dockhand: { synced_at: now, containers: [] } } })] });
+  const card = ui.document.querySelector('.mc-card');
+  assert.equal(card.querySelector('.machine-main .type-chip'), null);
+  assert.match(card.querySelector('.machine-meta').textContent, /VM.*Debian 13/);
+  assert.ok(card.querySelector('.mc-os-scope .mc-status-group'));
+  assert.ok(card.querySelector('.mc-os-scope .mc-footer [data-act="upgrade"]'));
+  assert.ok(card.querySelector('.mc-os-scope [data-menu-scope="machine"]'));
+  assert.ok(card.querySelector('.mc-containers [data-menu-scope="containers"]'));
+  assert.equal(card.querySelector('.mc-containers [data-act="upgrade"]'), null);
 });

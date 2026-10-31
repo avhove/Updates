@@ -746,3 +746,14 @@ retain their independent monitoring control. Generic defaults, placeholders and 
 no longer assume Dockhand; existing explicitly configured manager names remain intact.
 Verification: 68 offline UI tests and 37 Docker settings/provider backend tests pass. Simulated
 browser save confirmed the custom manager name/link and menu without image checks or deployments.
+
+### Restore the earlier mobile card composition
+
+Mobile cards again pair identity on the left with OS status and checked time on the right.
+Machine type now sits beside the OS on the second line. Metrics occupy a separate row, with the
+OS action at bottom left and More at bottom right. When there is no OS action, backup information
+shares the bottom row with More. Container hosts add a matching section below with independent
+status, check time, metrics and actions. Containers-only retains the same identity and section.
+Machine information remains in More, rather than adding the old inline information button.
+Verification: all 69 offline UI tests pass. Simulated browser review at 320, 390 and 768 pixels
+confirmed readable separate scopes and no page overflow. Desktop table layout is unchanged.
