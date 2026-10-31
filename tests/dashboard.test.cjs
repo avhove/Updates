@@ -694,7 +694,7 @@ test("native Docker counts services, distinguishes missing Compose coverage and 
     machine('empty', { view: { stacks: { ...stacks, stacks: [] } } }),
   ] });
   assert.match(ui.document.querySelector('.container-indicator[data-open-docker="native"]').textContent, /2/);
-  assert.match(ui.document.querySelector('.container-indicator[data-open-docker="empty"]').textContent, /—/);
+  assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="empty"]'), null);
   ui.click('[data-open-docker="empty"]');
   assert.match(ui.document.querySelector('.container-detail').textContent, /Standalone containers are not checked/);
   assert.equal(ui.document.querySelectorAll('.scope-cell').length, 4);
@@ -1907,5 +1907,36 @@ test("accepted guest boot spins through queued/running jobs and stops on complet
       assert.match(status().textContent, /Not running/);
       assert.ok(ui.document.querySelector('[data-act="start"]'));
     }
+  }
+});
+
+
+test("a completed empty native scan has a neutral stack status and timestamp, without claiming unchecked hosts are empty", async () => {
+  for (const mobile of [false, true]) {
+    const complete = { docker: 'yes', compose: 'v2', checked_at: now, stacks: [] };
+    const variants = [
+      ['clean', complete, {}, 'No stacks found'],
+      ['unchecked', null, {}, 'Not checked'],
+      ['undated', { ...complete, checked_at: null }, {}, 'Not checked'],
+      ['failed', { ...complete, error: 'Docker API unavailable' }, {}, 'Check unavailable'],
+      ['stale', complete, { updatable: false, status: 'stopped' }, 'Last-known results'],
+      ['checking', complete, {}, 'Checking containers…'],
+    ];
+    for (const [id, stacks, target, expected] of variants) {
+      const ui = await dashboard({ mobile, targets: [machine(id, { target,
+        check: { docker_installed: true }, view: { stacks, active_job: id === 'checking' ? { action: 'stacks' } : null } })] });
+      ui.setView('containers');
+      const row = ui.document.querySelector(mobile ? '.mc-card' : '.container-row');
+      assert.equal(row.querySelector('.container-status-hit').textContent, expected);
+      if (id === 'clean') {
+        assert.ok(row.querySelector('.container-status-hit .muted'));
+        assert.equal(row.querySelector('.container-indicator'), null);
+        assert.doesNotMatch(row.querySelector(mobile ? '.mc-container-check' : '.container-check').textContent, /Not checked|—/);
+      }
+    }
+    const ui = await dashboard({ mobile, targets: [machine('dockhand-empty', { view: {
+      dockhand: { synced_at: now, last_check_at: now, stale: false, containers: [] } } })] });
+    ui.setView('containers');
+    assert.equal(ui.document.querySelector('.container-status-hit').textContent, 'Not checked');
   }
 });
