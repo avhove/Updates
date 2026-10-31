@@ -478,6 +478,10 @@ class DockhandReader:
             if saved:
                 try:
                     cache = SavedDockhand.model_validate_json(saved)
+                    for record in [*cache.status.containers, *cache.checked]:
+                        if record.status == "updated" and record.source == "fleetdeck_update" and record.updated_at:
+                            record.status = "current"
+                            record.image_update = False
                     self.status[mapping.target_id] = cache.status.model_copy(update={"stale": True, "checking": False})
                     self.checked[mapping.target_id] = {c.container_id: c for c in cache.checked}
                 except ValueError:
@@ -543,7 +547,7 @@ class DockhandReader:
             raise ValueError("Unmatched execution")
         return summary, scheduled_results(execution, containers, environment_id)
 
-    def request_check(self, target_id: str, *, scheduled: bool = False, following_update: bool = False) -> None:
+    def request_check(self, target_id: str, *, scheduled: bool = False) -> None:
         if not self.cfg.allow_checks:
             raise PermissionError("Enable dockhand.allow_checks in Settings to allow explicit Dockhand checks")
         mapping = next((m for m in self.cfg.environments if m.target_id == target_id), None)
@@ -552,7 +556,7 @@ class DockhandReader:
         if (
             target_id in self.updating
             or target_id in self.tasks
-            or (not following_update and time.monotonic() - self.last_started.get(target_id, -60) < 30)
+            or time.monotonic() - self.last_started.get(target_id, -60) < 30
         ):
             raise ValueError("A Dockhand check is running or was started recently; wait before retrying")
         if len(self.tasks) >= 4:
@@ -569,7 +573,7 @@ class DockhandReader:
             old = known.get(item.container_id)
             if old and old.image != item.image:
                 old = None
-            if old and old.status == "updated" and item.status != "unknown":
+            if old and old.source == "fleetdeck_update" and item.status != "unknown":
                 known.pop(item.container_id, None)
                 old = None  # Explicit provider findings supersede a deployment-only marker.
             if item.status == "excluded":
@@ -586,7 +590,11 @@ class DockhandReader:
                 items[index] = record
             else:
                 items[index] = retain_findings(item, old)
-            if items[index].checked_at is not None or items[index].status in {"update", "updated"}:
+            if (
+                items[index].checked_at is not None
+                or items[index].status == "update"
+                or items[index].updated_at is not None
+            ):
                 known[item.container_id] = items[index]
         return items
 

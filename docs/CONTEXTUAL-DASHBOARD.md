@@ -868,13 +868,10 @@ confirmation use the same blue token as container-update status. OS actions rema
 disabled deployments retain their neutral appearance. All 74 UI tests pass.
 
 After a confirmed Fleetdeck-requested Dockhand update, Fleetdeck reconciles the returned
-replacement container ID with inventory. It shows **Updated · awaiting image check** and
-a labelled update time until a fresh image-check result arrives. This deployment marker
-survives report polling and restarts; it is not an “Up to date” result. Updates performed
-directly in Dockhand still need a matching check result for the replacement ID. After a fully confirmed Fleetdeck-requested deployment, Fleetdeck requests one fresh
-Dockhand check if `dockhand.allow_checks` is enabled. This check covers the mapped Dockhand
-environment, uses the usual concurrency limit, and bypasses only the recent-check cooldown
-because the replacement IDs need new results. Failed or uncertain deployments do not trigger
-it. A failed follow-up check does not reclassify the successful install as failed; the UI
-shows the check error separately. No automatic retry, schedule change or extra deployment
-occurs. Inventory refresh stays read-only; `schedule.check_docker` still controls scheduled rounds.
+replacement container ID, name and image with fresh inventory. It shows **Up to date** based
+on Dockhand’s successful image pull and recreation, with **Updated …** as the timestamp.
+It does not invent a registry-check timestamp. The confirmation survives read-only report
+polling and restarts; explicit later provider findings supersede it. No extra registry check
+is requested. The next normal scheduled or manual check reassesses the container. Failed,
+skipped, warning or mismatched replacements never become healthy from this confirmation.
+Updates performed directly in Dockhand still need a matching API result for the new ID.

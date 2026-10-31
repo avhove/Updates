@@ -391,10 +391,12 @@ async def test_pre_update_poll_cannot_restore_invalidated_results():
 
 
 @pytest.mark.parametrize("identity_matches", [True, False])
-async def test_replacement_update_marker_persists_until_real_check(tmp_path, identity_matches):
+@pytest.mark.parametrize("legacy_marker", [True, False])
+async def test_confirmed_replacement_is_current_until_next_real_check(tmp_path, identity_matches, legacy_marker):
     from fleetdeck.store import Store
 
     reader, _, selections = reader_for({})
+    reader.cfg.allow_checks = True  # Even with permission, deployment must not trigger a registry check.
     await reader.client.aclose()
     installed = False
     calls = []
@@ -430,10 +432,16 @@ async def test_replacement_update_marker_persists_until_real_check(tmp_path, ide
     await install(reader, "host", selections, lambda: None, lambda *_: None)
     replacement = reader.status["host"].containers[0]
     assert replacement.container_id == "new-id"
-    assert replacement.status == ("updated" if identity_matches else "unknown")
-    assert replacement.checked_at is None and replacement.image_update is None
+    assert replacement.status == ("current" if identity_matches else "unknown")
+    assert replacement.checked_at is None
+    assert replacement.image_update is (False if identity_matches else None)
     assert bool(replacement.updated_at) == identity_matches
     assert [r.url.path for r in calls if r.method == "POST"] == ["/api/containers/batch-update"]
+    if legacy_marker and identity_matches:
+        legacy = replacement.model_copy(update={"status": "updated", "image_update": None})
+        reader.checked["host"]["new-id"] = legacy
+        reader.status["host"].containers = [legacy]
+        reader._save("host")
     await reader.aclose()
 
     restored = DockhandReader(reader.cfg, store=reader.store, transport=httpx.MockTransport(respond))
@@ -455,74 +463,3 @@ async def test_replacement_update_marker_persists_until_real_check(tmp_path, ide
         assert result.checked_at is not None and result.updated_at is None
     await restored.aclose()
     reader.store.close()
-
-
-@pytest.mark.parametrize("allow_checks,check_fails", [(True, False), (True, True), (False, False)])
-async def test_confirmed_update_requests_one_followup_check_when_allowed(allow_checks, check_fails):
-    import asyncio
-    import time
-
-    reader, _, selections = reader_for({})
-    await reader.client.aclose()
-    installed = False
-    posts = []
-
-    def respond(request):
-        nonlocal installed
-        if request.method == "POST":
-            posts.append(request.url.path)
-        if request.url.path.endswith("batch-update"):
-            installed = True
-            return httpx.Response(
-                200, json={"results": [{"containerId": "new-id", "containerName": "web", "success": True}]}
-            )
-        if request.url.path.endswith("check-updates"):
-            if check_fails:
-                return httpx.Response(403, json={"error": "PRIVATE-error"})
-            return httpx.Response(200, json={"results": [{"containerId": "new-id", "hasUpdate": False}]})
-        if request.url.path == "/api/containers":
-            return httpx.Response(
-                200,
-                json=[
-                    {
-                        "id": "new-id" if installed else "old-id",
-                        "name": "web",
-                        "image": "nginx:1.27",
-                        "state": "running",
-                        "labels": {},
-                    }
-                ],
-            )
-        return httpx.Response(200, json={"pendingUpdates": []})
-
-    reader.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
-    reader.cfg.allow_checks = allow_checks
-    reader.checked["host"] = {"old-id": row()}
-    reader.last_started["host"] = time.monotonic()  # A recent pre-update check must not block the new identity.
-    lines = []
-    await install(reader, "host", selections, lambda: None, lambda _, line: lines.append(line))
-    assert reader.status["host"].checking == allow_checks
-    await asyncio.gather(*list(reader.tasks.values()))
-    result = reader.status["host"]
-    if allow_checks:
-        assert posts == ["/api/containers/batch-update", "/api/containers/check-updates"]
-        assert not result.checking
-        assert result.containers[0].status == ("updated" if check_fails else "current")
-        assert bool(result.check_error) == check_fails
-    else:
-        assert posts == ["/api/containers/batch-update"]
-        assert result.containers[0].status == "updated"
-    assert "PRIVATE-error" not in "\n".join(lines)
-    await reader.aclose()
-
-
-async def test_uncertain_update_does_not_trigger_followup_check():
-    reader, calls, selections = reader_for(
-        {"results": [{"containerId": "old-id", "containerName": "web", "success": False, "error": "failed"}]}
-    )
-    reader.cfg.allow_checks = True
-    with pytest.raises(ValueError):
-        await install(reader, "host", selections, lambda: None, lambda *_: None)
-    assert not reader.tasks
-    assert [r.url.path for r in calls if r.method == "POST"] == ["/api/containers/batch-update"]
-    await reader.aclose()

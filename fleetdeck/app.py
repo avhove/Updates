@@ -411,8 +411,8 @@ def create_app(
                         "containers": [
                             c.model_copy(
                                 update={
-                                    "status": "updated",
-                                    "image_update": None,
+                                    "status": "current",
+                                    "image_update": False,
                                     "checked_at": None,
                                     "updated_at": datetime.now(UTC),
                                     "source": "fleetdeck_update",
@@ -426,27 +426,6 @@ def create_app(
                     }
                 )
                 on_line("stdout", "== Simulated Dockhand update; no manager was contacted")
-                if cfg.dockhand.allow_checks:
-                    current = demo_dockhand[req.target_id]
-                    demo_dockhand[req.target_id] = current.model_copy(
-                        update={
-                            "containers": [
-                                c.model_copy(
-                                    update={
-                                        "status": "current",
-                                        "image_update": False,
-                                        "checked_at": datetime.now(UTC),
-                                        "source": "fleetdeck_button",
-                                        "updated_at": None,
-                                    }
-                                )
-                                if c.container_id in ids
-                                else c
-                                for c in current.containers
-                            ]
-                        }
-                    )
-                    on_line("stdout", "== Simulated follow-up image check confirmed updated images")
             elif dockhand:
                 await install(dockhand, req.target_id, req.containers, guard, on_line)
             else:

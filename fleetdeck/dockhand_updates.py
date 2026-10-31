@@ -69,7 +69,6 @@ async def install(reader, target_id: str, selections: list[ContainerSelection], 
         raise ValueError("A Dockhand operation is already running")
     reader.updating.add(target_id)
     sent = False
-    completed = False
     try:
         guard()
         containers = await reader._get("containers", mapping.environment_id)
@@ -150,11 +149,11 @@ async def install(reader, target_id: str, selections: list[ContainerSelection], 
                 for item in fresh:
                     before = confirmed.get(item.container_id)
                     if before and item.name == before.name and item.image == before.image:
-                        item.status = "updated"
+                        item.status = "current"
                         item.updated_at = now
                         item.source = "fleetdeck_update"
                         item.checked_at = None
-                        item.image_update = None
+                        item.image_update = False
                         item.check_issue = None
                         reader.checked.setdefault(target_id, {})[item.container_id] = item
                 reader.status[target_id] = current.model_copy(
@@ -163,8 +162,7 @@ async def install(reader, target_id: str, selections: list[ContainerSelection], 
                 reader._save(target_id)
         if failed:
             raise ValueError("Some containers were not confirmed updated; inspect Dockhand before retrying")
-        completed = True
-        on_line("stdout", "== Dockhand confirmed updates")
+        on_line("stdout", "== Dockhand confirmed updates; replacement containers are up to date as of this update.")
     except (httpx.HTTPError, TimeoutError):
         raise ValueError(
             "Dockhand update response unavailable. It may still be running; inspect Dockhand before retrying."
@@ -173,14 +171,3 @@ async def install(reader, target_id: str, selections: list[ContainerSelection], 
         reader.updating.discard(target_id)
         if sent:
             reader.next_poll = 0
-        if completed:
-            if reader.cfg.allow_checks:
-                try:
-                    # A new identity needs a new result even if the pre-update check was recent.
-                    reader.request_check(target_id, following_update=True)
-                except (PermissionError, ValueError, KeyError):
-                    on_line("stdout", "== Follow-up image check could not start; request a container check later")
-                else:
-                    on_line("stdout", "== Fresh Dockhand image check requested; follow its result in container details")
-            else:
-                on_line("stdout", "== Fresh checks are disabled; waiting for Dockhand’s next check")

@@ -1688,29 +1688,29 @@ test("Dockhand install permission is saved per mapping and starts no update", as
   assert.equal(ui.calls.some(c => c.path === '/api/dockhand/update'), false);
 });
 
-test("confirmed deployments have a distinct waiting state and never masquerade as image checks", async () => {
+test("confirmed deployments are current with a labelled update time and no invented image-check time", async () => {
   const ui = await dashboard({ targets:[machine('docker',{view:{dockhand:{stale:false,containers:[
-    {container_id:'replacement',name:'web',image:'web:1',state:'running',status:'updated',updated_at:now,source:'fleetdeck_update',checked_at:null,image_update:null},
+    {container_id:'replacement',name:'web',image:'web:1',state:'running',status:'current',updated_at:now,source:'fleetdeck_update',checked_at:null,image_update:false},
   ]}}})] });
   ui.click('[data-open-docker="docker"]');
   const row=ui.document.querySelector('.container-results-table tbody tr');
-  assert.match(row.textContent,/Updated · awaiting image check/);
+  assert.match(row.textContent,/Up to date/);
   assert.match(row.querySelector('[data-label="Last checked"]').textContent,/Updated just now/);
-  assert.doesNotMatch(row.textContent,/Up to date|Check result unavailable|Not checked/);
-  assert.match(ui.document.querySelector('.container-filters').textContent,/Coverage 1/);
+  assert.doesNotMatch(row.textContent,/Check result unavailable|Not checked/);
+  assert.match(ui.document.querySelector('.container-filters').textContent,/Up to date 1/);
 });
 
 test("updated-image spinner appears only while a fresh check is actually running", async () => {
   const target=machine('docker',{view:{dockhand:{stale:false,checking:true,containers:[
-    {container_id:'replacement',name:'web',image:'web:1',state:'running',status:'updated',updated_at:now,source:'fleetdeck_update'},
+    {container_id:'replacement',name:'web',image:'web:1',state:'running',status:'current',image_update:false,updated_at:now,source:'fleetdeck_update'},
   ]}}});
   const ui=await dashboard({targets:[target]});
   ui.click('[data-open-docker="docker"]');
   const row=ui.document.querySelector('.container-results-table tbody tr');
-  assert.match(row.textContent,/Checking updated image…/);
+  assert.match(row.textContent,/Checking image…/);
   assert.ok(row.querySelector('.container-result .spin'));
   target.dockhand.checking=false;
   ui.render();
   assert.equal(ui.document.querySelector('.container-results-table tbody tr .spin'),null);
-  assert.match(ui.document.querySelector('.container-results-table tbody tr').textContent,/Updated · awaiting image check/);
+  assert.match(ui.document.querySelector('.container-results-table tbody tr').textContent,/Up to date/);
 });
