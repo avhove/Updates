@@ -123,7 +123,7 @@ function dockerCell(v, withManager = true) {
   const manager = s.provider === "dockhand" ? "Monitored externally by Dockhand" : "Managed by Fleetdeck native Docker";
   const badge = (filter, symbol, value, label, tone) => `<button class="container-metric-hit container-indicator ${tone || ""}" data-open-docker="${id}" data-container-filter="${filter}" data-focus-key="docker:${id}:${filter}:${symbol}" aria-expanded="${state.containerExpanded.has(v.target.id) && selected === filter}" title="${esc(label)}" aria-label="${esc(`${label}. ${manager}. View container details`)}"><span class="update-metric ${tone || ""}">${symbol === "spin" ? '<span class="spin"></span>' : icon(symbol)}${value === null ? "" : `<span>${value}</span>`}</span></button>`;
   const label = s.usable ? `${s.updates} ${plural(s.updates, "container with an image update", "containers with image updates")}${s.stale ? " · last-known results" : ""}` : "Container update count unavailable";
-  let body = badge("updates", "container", s.value, label, `container${s.stale ? " last-known" : ""}${s.unknown ? " unknown" : ""}`);
+  let body = s.value === 0 ? empty("updates") : badge("updates", "container", s.value, label, `container${s.stale ? " last-known" : ""}${s.unknown ? " unknown" : ""}`);
   body += s.reviews ? badge("review", "tag", s.reviews, `${s.reviews} containers with version / pinned-digest advisories or held updates`, "container-review") : empty("review");
   body += s.coverage ? badge("coverage", "coverage", s.coverage,
     `${s.coverage} coverage ${plural(s.coverage, "exception", "exceptions")}: local, excluded, new or unmatched containers`, "container-coverage") : empty("coverage");

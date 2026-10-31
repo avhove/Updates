@@ -753,7 +753,7 @@ test("Dockhand checks require opt-in and confirmation, then use only the mapped 
   target.dockhand.last_check_at = now;
   target.dockhand.containers[0].status = 'current';
   ui.render();
-  assert.match(ui.document.querySelector('.container-indicator[data-open-docker]').textContent, /0/);
+  assert.equal(ui.document.querySelector('.container-indicator[data-container-filter="updates"]'),null);
   assert.match(ui.document.querySelector('.container-detail').textContent, /Up to date/);
   target.dockhand.containers[0].status = 'failed';
   ui.render();
@@ -903,8 +903,8 @@ test("a newer confirmed manual check remains usable when schedule history is una
         { name: 'web', image: 'web:latest', state: 'running', status: 'current', checked_at: now, source: 'fleetdeck_button' },
       ] },
   } })] });
-  assert.match(ui.document.querySelector('.container-indicator[data-open-docker]').textContent, /0/);
-  assert.doesNotMatch(ui.document.querySelector('.container-indicator[data-open-docker]').textContent, /\?/);
+  assert.equal(ui.document.querySelector('.container-indicator[data-container-filter="updates"]'),null);
+  assert.doesNotMatch(ui.document.querySelector('[data-container-row="docker"]').textContent, /\?/);
 });
 
 test("per-machine menu separates OS and Dockhand checks and targets only the selected machine", async () => {
@@ -1008,7 +1008,7 @@ test("local-only and offline cases keep coverage and connection separate from co
       { name: 'old', image: 'old:1', status: 'update', checked_at: now },
     ] } } }),
   ] });
-  assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="healthy-local"][data-container-filter="updates"]').textContent, '0');
+  assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="healthy-local"][data-container-filter="updates"]'),null);
   assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="healthy-local"][data-container-filter="coverage"]').textContent, '1');
   assert.match(ui.document.querySelector('.container-indicator[data-open-docker="unreachable"]').textContent, /—/);
   assert.ok(ui.document.querySelector('.container-indicator[data-open-docker="checking"] .update-metric'));
@@ -1808,6 +1808,7 @@ test("native Compose scope alone creates no coverage icon or empty tab", async (
     const ui=await dashboard({mobile,targets:[target]});
     const coverage=()=>ui.document.querySelector('[data-open-docker="native"][data-container-filter="coverage"]');
     assert.equal(coverage(),null);
+    assert.equal(ui.document.querySelector('.container-indicator[data-container-filter="updates"]'),null);
     ui.click('[data-open-docker="native"][data-container-filter="all"]');
     const panel=()=>ui.document.querySelector(mobile?'.mc-container-panel':'.container-detail');
     assert.equal(panel().querySelector('[data-container-view-filter="coverage"]'),null);

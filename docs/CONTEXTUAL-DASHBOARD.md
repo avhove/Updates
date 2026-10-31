@@ -899,3 +899,7 @@ permissions, active jobs or unavailable reports still show a disabled action.
 Native Compose-only scope is explained in details, without manufacturing a coverage exception.
 Coverage icons and tabs require actual per-container exceptions. If the final exception clears
 while its filter is open, details return to All instead of leaving an empty, unselectable view.
+
+Confirmed zero container image-update counts do not render an update icon or zero badge.
+Positive counts and unavailable-count indicators remain visible; empty metric slots preserve
+column alignment. Up-to-date status and the clickable status/details action remain available.
