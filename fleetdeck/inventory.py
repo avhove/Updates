@@ -56,7 +56,7 @@ class Inventory:
     async def refresh(self, force: bool = False) -> None:
         async with self._lock:
             age = time.monotonic() - self._refreshed
-            if age < (self.min_interval if force else self.ttl):
+            if self._refreshed and age < (self.min_interval if force else self.ttl):
                 return
             results = await asyncio.gather(*(p.discover() for p in self.providers), return_exceptions=True)
             targets: dict[str, tuple[Target, Executor | None]] = {}
