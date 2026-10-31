@@ -409,7 +409,7 @@ function render() {
     return `
     <div class="group">
       <div class="group-head"><span class="chip">${PLATFORM[g.platform] || g.platform}</span> ${esc(g.title)}</div>
-      <div class="group-scroll"><table class="machine-table${g.rows.some(v => v.dockhand_updates_allowed) ? " has-dockhand-updates" : ""}${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
+      <div class="group-scroll"><table class="machine-table${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
         <colgroup><col class="col-select"><col class="col-machine"><col class="col-scope"><col class="col-status"><col class="col-updates"><col class="col-checked">${withBackup ? '<col class="col-backup">' : ""}<col class="col-actions"></colgroup>
         ${machineTableHead(withBackup)}
         ${rows}

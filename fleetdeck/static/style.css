@@ -1226,8 +1226,6 @@ a.brand { color: var(--text); text-decoration: none; }
 .dockhand-update-choice { display:flex; align-items:flex-start; gap:10px; padding:12px 0; border-bottom:1px solid var(--border); }
 .dockhand-update-choice input { width:auto; flex:none; margin-top:4px; }
 .dockhand-update-choice small { display:block; color:var(--muted); overflow-wrap:anywhere; }
-.dashboard-page .machine-table.has-dockhand-updates col.col-actions { width:204px; }
-.dashboard-page .machine-table.has-dockhand-updates .scope-actions { grid-template-columns:minmax(0,144px) 30px; }
 .dashboard-page .scope-actions > .dockhand-update-action { width:auto; max-width:none; white-space:nowrap; }
 @media(pointer:coarse) { .dockhand-update-choice { min-height:44px; } }
 #dockhand-update-dialog { max-width:600px; }

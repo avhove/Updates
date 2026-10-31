@@ -852,3 +852,7 @@ Final checks: 72 offline UI tests and 119 Dockhand/provider regression tests pas
 and diff checks pass. The broader run passed 547 tests initially; its 9 loopback-server failures
 all passed after loopback permission was restored (6 skips and 7 known platform exclusions).
 Pre-deployment polls are versioned so an in-flight old report cannot restore invalidated results.
+
+The Dockhand container action is now labelled Update within its Containers row/panel. Its accessible
+name and confirmation retain the full container scope. The Actions column uses the ordinary 144px
+budget again, rather than expanding to accommodate Update containers.

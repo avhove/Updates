@@ -95,7 +95,7 @@ function dockhandUpdateButton(v, row = null) {
   if (row && !eligible) return "";
   const enabled = eligible && !status.stale && !status.error && !status.check_error && !status.checking && !v.active_job && !v.blocked && !v.monitor_only && canUpgrade(v.target);
   const reason = enabled ? "Confirm selected container updates through Dockhand; containers may restart" : v.monitor_only ? MONITOR_TIP : v.blocked || (v.active_job ? "Wait for the current machine job" : "Request a fresh container check or review update exclusions");
-  return `<button class="small primary dockhand-update-action" data-dockhand-update="${esc(v.target.id)}" ${row ? `data-container-id="${esc(row.container_id)}"` : ""} ${enabled ? "" : "disabled"} title="${esc(reason)}">${icon("download")}${row ? "Update" : "Update containers"}</button>`;
+  return `<button class="small primary dockhand-update-action" aria-label="${esc(row ? `Update ${row.name} through Dockhand` : `Update containers on ${v.target.name}`)}" data-dockhand-update="${esc(v.target.id)}" ${row ? `data-container-id="${esc(row.container_id)}"` : ""} ${enabled ? "" : "disabled"} title="${esc(reason)}">${icon("download")}Update</button>`;
 }
 
 function containerRowAction(v) {
