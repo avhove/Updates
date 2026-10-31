@@ -16,7 +16,7 @@ jobs:
           - name: Original upstream main
             ref: 81fa17f0f8f9dd0110cba2602715a1256a212fee
           - name: Cleaned container dashboard proposal
-            ref: 325b0fb301c623c00c4fe55b3944b744e0669a8f
+            ref: 1dda8e6434d2791ca29f8ba3c0d634286fd09b3b
     steps:
       - uses: actions/checkout@v7
         with:
@@ -43,4 +43,4 @@ jobs:
               data = client.get("/api/targets").json()
               print("API targets", len(data.get("targets", [])), "errors", data.get("errors"))
           PYCODE
-      - run: python -m pytest -q
+      - run: python -m pytest -q -ra
