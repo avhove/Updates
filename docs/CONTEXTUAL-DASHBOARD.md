@@ -757,3 +757,6 @@ status, check time, metrics and actions. Containers-only retains the same identi
 Machine information remains in More, rather than adding the old inline information button.
 Verification: all 69 offline UI tests pass. Simulated browser review at 320, 390 and 768 pixels
 confirmed readable separate scopes and no page overflow. Desktop table layout is unchanged.
+
+Mobile card follow-up: backup age and schedule coverage now sit on the right of the OS metric
+row, above the bottom action/More row, whether or not the machine has a primary action.

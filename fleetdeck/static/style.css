@@ -1148,3 +1148,11 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .mc-card:not(:has(.mc-os-scope)) .mc-containers { grid-row:3; }
   .dashboard-page .mc-card:not(:has(.mc-os-scope)) > .mc-details { grid-row:4; }
 }
+
+/* Keep backup context opposite the OS counts, above the bottom actions. */
+@media(max-width:1119px) {
+  .dashboard-page .mc-card:has(.mc-os-scope):has(.mc-details) .mc-os-scope .mc-counts.os-metrics { grid-column:1; }
+  .dashboard-page .mc-card:has(.mc-os-scope) > .mc-details { grid-column:2; grid-row:3; align-self:center; justify-self:end; margin:0; text-align:right; }
+  .dashboard-page .mc-card:has(.mc-os-scope) .mc-detail-line { grid-template-columns:auto auto; gap:6px; }
+  .dashboard-page .mc-card:has(.mc-os-scope) .mc-backup-value { justify-content:flex-end; flex-wrap:wrap; gap:5px; }
+}
