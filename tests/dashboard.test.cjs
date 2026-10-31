@@ -1919,7 +1919,7 @@ test("a completed empty native scan has a neutral stack status and timestamp, wi
       ['unchecked', null, {}, 'Not checked'],
       ['undated', { ...complete, checked_at: null }, {}, 'Not checked'],
       ['failed', { ...complete, error: 'Docker API unavailable' }, {}, 'Check unavailable'],
-      ['stale', complete, { updatable: false, status: 'stopped' }, 'Last-known results'],
+      ['stale', complete, { updatable: false, status: 'stopped' }, 'Not running'],
       ['checking', complete, {}, 'Checking containers…'],
     ];
     for (const [id, stacks, target, expected] of variants) {
@@ -1938,5 +1938,36 @@ test("a completed empty native scan has a neutral stack status and timestamp, wi
       dockhand: { synced_at: now, last_check_at: now, stale: false, containers: [] } } })] });
     ui.setView('containers');
     assert.equal(ui.document.querySelector('.container-status-hit').textContent, 'Not checked');
+  }
+});
+
+
+test("offline container hosts retain saved counters with a last-known check time and consistent power status", async () => {
+  for (const mobile of [false, true]) {
+    for (const provider of ['native', 'dockhand']) {
+      for (const stopped of ['stopped', 'offline']) {
+        const target = machine('host', { target: { status: stopped, updatable: false },
+          check: { docker_installed: true }, view: provider === 'native'
+            ? { stacks: { docker: 'yes', checked_at: now, stacks: [] } }
+            : { dockhand: { stale: false, synced_at: now, containers: [
+                { name: 'web', image: 'web:1', state: 'running', status: 'current', checked_at: now }] } } });
+        const ui = await dashboard({ mobile, targets: [target] });
+        ui.setView('containers');
+        const row = () => ui.document.querySelector(mobile ? '.mc-card' : '.container-row');
+        const time = () => row().querySelector(mobile ? '.mc-container-check' : '.container-check');
+        assert.equal(row().querySelector('.container-status-hit').textContent, stopped === 'stopped' ? 'Not running' : 'Offline');
+        assert.match(time().textContent, /Last known/);
+        assert.equal(row().querySelector('.container-indicator'), null, 'known zero stays hidden when the host stops');
+        if (provider === 'native') target.stacks.stacks = [{ name: 'app', services: [{ name: 'web', image: 'web:1', status: 'running', outdated: true }] }];
+        else target.dockhand.containers[0].status = 'update';
+        await ui.load();
+        assert.match(row().querySelector('.container-indicator').textContent, /1/);
+        assert.match(time().textContent, /Last known/);
+        target.target.status = 'running'; target.target.updatable = true;
+        await ui.load();
+        assert.equal(row().querySelector('.container-status-hit').textContent, 'Updates available');
+        assert.doesNotMatch(time().textContent, /Last known/);
+      }
+    }
   }
 });
