@@ -16,7 +16,7 @@ jobs:
           - name: Original upstream main
             ref: 81fa17f0f8f9dd0110cba2602715a1256a212fee
           - name: Cleaned container dashboard proposal
-            ref: 325b0fb
+            ref: 325b0fb301c623c00c4fe55b3944b744e0669a8f
     steps:
       - uses: actions/checkout@v7
         with:
