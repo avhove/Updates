@@ -1828,3 +1828,45 @@ test("native Compose scope alone creates no coverage icon or empty tab", async (
     assert.equal(ui.calls.some(c=>c.method==='POST'),false);
   }
 });
+
+test("detail close controls collapse only their scope, restore focus and never submit actions", async () => {
+  for (const mobile of [false,true]) {
+    const ui=await dashboard({mobile, targets:[machine('both',{check:{packages:[
+      {name:'openssl',security:true,current:'1',available:'2'}]},view:{dockhand:{stale:false,containers:[
+        {name:'web',image:'web:1',state:'running',status:'current',checked_at:now}]}}})]});
+    ui.setView('all');
+    assert.equal(ui.document.querySelector('.details-panel-footer'),null);
+    ui.click('[data-toggle="both"][data-package-filter="security"]');
+    ui.click('[data-open-docker="both"][data-container-filter="all"]');
+    ui.click('.detail-close-top[data-close-details="os"]');
+    assert.equal(ui.state.expanded.has('both'),false);
+    assert.equal(ui.state.containerExpanded.has('both'),true);
+    assert.equal(ui.state.packageFilters.both,'security');
+    assert.equal(ui.document.activeElement.dataset.focusKey,'os-status:both');
+    ui.click('.os-status-hit[data-toggle="both"]');
+    ui.click('.detail-close-top[data-close-details="containers"]');
+    assert.equal(ui.state.expanded.has('both'),true);
+    assert.equal(ui.state.containerExpanded.has('both'),false);
+    assert.equal(ui.document.activeElement.dataset.focusKey,'container-status:both');
+    ui.click('.detail-close-top[data-close-details="os"]');
+    assert.equal(ui.state.expanded.has('both'),false);
+    ui.click('[data-open-docker="both"][data-container-filter="all"]');
+    ui.click('.detail-close-top[data-close-details="containers"]');
+    assert.equal(ui.state.containerExpanded.has('both'),false);
+    assert.equal(ui.calls.some(call=>call.method==='POST'),false);
+  }
+});
+
+test("native and link-only container details retain close controls", async () => {
+  for (const mode of ['managed','external','disabled']) {
+    const target=machine('host',{check:{docker_installed:true},view:{docker_settings:{mode,manager_name:'Other manager'},
+      stacks:{docker:'yes',compose:'v2',checked_at:now,stacks:[]}}});
+    const ui=await dashboard({targets:[target]});
+    ui.setView('all');
+    ui.click('[data-open-docker="host"][data-container-filter="all"]');
+    assert.equal(ui.document.querySelectorAll('[data-close-details="containers"]').length,1);
+    ui.click('.detail-close-top[data-close-details="containers"]');
+    assert.equal(ui.state.containerExpanded.has('host'),false);
+    assert.equal(ui.calls.some(call=>call.method==='POST'),false);
+  }
+});

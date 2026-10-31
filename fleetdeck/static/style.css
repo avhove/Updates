@@ -1259,3 +1259,36 @@ a.brand { color: var(--text); text-decoration: none; }
 }
 
 .dashboard-menu-session button span { min-width:0; overflow-wrap:anywhere; }
+
+/* Keep the detail close control aligned with its heading. */
+.dashboard-page .details-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.dashboard-page .details-panel-heading strong { min-width: 0; overflow-wrap: anywhere; }
+.dashboard-page .packages-table-scroll { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.dashboard-page .mc-package-panel .packages-panel { overflow: hidden; }
+.dashboard-page button.detail-close-top { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; min-width: 36px; height: 36px; padding: 8px; }
+.dashboard-page .docker-host > .group-head { display: grid; grid-template-columns: minmax(0, 1fr) auto 36px; align-items: center; gap: 10px; }
+.dashboard-page .container-panel-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dashboard-page .container-panel-title > span { min-width: 0; overflow-wrap: anywhere; }
+.dashboard-page .container-panel-title > .ui-icon { flex: none; }
+.dashboard-page .container-panel-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+.dashboard-page .container-panel-actions .host-mode { margin-left: 0; }
+@media (max-width: 1119px) {
+  .dashboard-page button.detail-close-top { width: 44px; min-width: 44px; height: 44px; }
+  .dashboard-page .docker-host > .group-head { grid-template-columns: minmax(0, 1fr) auto 44px; }
+  .dashboard-page .mc-card .mc-containers > .scope-actions > .more-actions { margin-left: auto; }
+}
+@media (max-width: 600px) {
+  .dashboard-page .docker-host > .group-head { grid-template-columns: minmax(0, 1fr) 44px; }
+  .dashboard-page .docker-host > .group-head > .container-panel-title { grid-column: 1; grid-row: 1; }
+  .dashboard-page .docker-host > .group-head > .detail-close-top { grid-column: 2; grid-row: 1; }
+  .dashboard-page .docker-host > .group-head > .container-panel-actions { grid-column: 1 / -1; grid-row: 2; justify-content: flex-start; }
+}
+
+/* Use the same action size for OS and container updates on cards. */
+@media (max-width: 1119px) {
+  .dashboard-page .mc-card .mc-action > button,
+  .dashboard-page .mc-card .scope-actions > button.dockhand-update-action.small {
+    width: auto; min-width: 92px; height: 42px; min-height: 42px;
+    padding: 7px 14px; font-size: 14px; line-height: 18px;
+  }
+}
