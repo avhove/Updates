@@ -129,17 +129,40 @@ async def install(reader, target_id: str, selections: list[ContainerSelection], 
         if len(by_name) != len(selected) or set(by_name) != {r.name for r in selected}:
             raise ValueError("Unmatched Dockhand update response; inspect Dockhand before retrying")
         failed = False
+        confirmed = {}
         for row in selected:
             result = by_name[row.name]
             ok = result.get("success") is True and not result.get("error") and not result.get("warnings")
             failed |= not ok
+            new_id = result.get("containerId")
+            if ok and isinstance(new_id, str) and new_id and new_id != row.container_id:
+                confirmed[new_id] = row
             on_line("stdout", f"== {row.name}: {'updated' if ok else 'failed, skipped or warning; inspect Dockhand'}")
+        # Reconcile the replacement identity without pretending an install is a registry check.
+        if confirmed:
+            try:
+                fresh = normalize(await reader._get("containers", mapping.environment_id), {"pendingUpdates": []})
+            except (httpx.HTTPError, ValueError, TypeError, KeyError):
+                on_line("stdout", "== Updates confirmed; replacement inventory could not be synced yet")
+            else:
+                now = datetime.now(UTC)
+                for item in fresh:
+                    before = confirmed.get(item.container_id)
+                    if before and item.name == before.name and item.image == before.image:
+                        item.status = "updated"
+                        item.updated_at = now
+                        item.source = "fleetdeck_update"
+                        item.checked_at = None
+                        item.image_update = None
+                        item.check_issue = None
+                        reader.checked.setdefault(target_id, {})[item.container_id] = item
+                reader.status[target_id] = current.model_copy(
+                    update={"containers": reader._merge(target_id, fresh), "synced_at": now}
+                )
+                reader._save(target_id)
         if failed:
             raise ValueError("Some containers were not confirmed updated; inspect Dockhand before retrying")
-        on_line(
-            "stdout",
-            "== Dockhand confirmed updates. Refresh inventory for new identities; check images for new results.",
-        )
+        on_line("stdout", "== Dockhand confirmed updates. Request an image check to confirm registry status.")
     except (httpx.HTTPError, TimeoutError):
         raise ValueError(
             "Dockhand update response unavailable. It may still be running; inspect Dockhand before retrying."

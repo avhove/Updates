@@ -1687,3 +1687,30 @@ test("Dockhand install permission is saved per mapping and starts no update", as
   assert.equal(req.allow_updates, true);
   assert.equal(ui.calls.some(c => c.path === '/api/dockhand/update'), false);
 });
+
+test("confirmed deployments have a distinct waiting state and never masquerade as image checks", async () => {
+  const ui = await dashboard({ targets:[machine('docker',{view:{dockhand:{stale:false,containers:[
+    {container_id:'replacement',name:'web',image:'web:1',state:'running',status:'updated',updated_at:now,source:'fleetdeck_update',checked_at:null,image_update:null},
+  ]}}})] });
+  ui.click('[data-open-docker="docker"]');
+  const row=ui.document.querySelector('.container-results-table tbody tr');
+  assert.match(row.textContent,/Updated · awaiting image check/);
+  assert.match(row.querySelector('[data-label="Last checked"]').textContent,/Updated just now/);
+  assert.doesNotMatch(row.textContent,/Up to date|Check result unavailable|Not checked/);
+  assert.match(ui.document.querySelector('.container-filters').textContent,/Coverage 1/);
+});
+
+test("updated-image spinner appears only while a fresh check is actually running", async () => {
+  const target=machine('docker',{view:{dockhand:{stale:false,checking:true,containers:[
+    {container_id:'replacement',name:'web',image:'web:1',state:'running',status:'updated',updated_at:now,source:'fleetdeck_update'},
+  ]}}});
+  const ui=await dashboard({targets:[target]});
+  ui.click('[data-open-docker="docker"]');
+  const row=ui.document.querySelector('.container-results-table tbody tr');
+  assert.match(row.textContent,/Checking updated image…/);
+  assert.ok(row.querySelector('.container-result .spin'));
+  target.dockhand.checking=false;
+  ui.render();
+  assert.equal(ui.document.querySelector('.container-results-table tbody tr .spin'),null);
+  assert.match(ui.document.querySelector('.container-results-table tbody tr').textContent,/Updated · awaiting image check/);
+});

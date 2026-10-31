@@ -866,3 +866,10 @@ its own offline tests, including resize, theme persistence behavior and escaped 
 Enabled container deployment buttons (Dockhand and native stacks) and the Dockhand update
 confirmation use the same blue token as container-update status. OS actions remain purple;
 disabled deployments retain their neutral appearance. All 74 UI tests pass.
+
+After a confirmed Fleetdeck-requested Dockhand update, Fleetdeck reconciles the returned
+replacement container ID with inventory. It shows **Updated · awaiting image check** and
+a labelled update time until a fresh image-check result arrives. This deployment marker
+survives report polling and restarts; it is not an “Up to date” result. Updates performed
+directly in Dockhand still need a matching check result for the replacement ID. No check
+is automatically started by deployment or inventory refresh.

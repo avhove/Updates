@@ -388,3 +388,70 @@ async def test_pre_update_poll_cannot_restore_invalidated_results():
     assert reader.status["host"].containers[0].status == "unknown"
     assert "old-id" not in reader.checked["host"]
     await reader.aclose()
+
+
+@pytest.mark.parametrize("identity_matches", [True, False])
+async def test_replacement_update_marker_persists_until_real_check(tmp_path, identity_matches):
+    from fleetdeck.store import Store
+
+    reader, _, selections = reader_for({})
+    await reader.client.aclose()
+    installed = False
+    calls = []
+
+    def respond(request):
+        nonlocal installed
+        calls.append(request)
+        if request.url.path.endswith("batch-update"):
+            installed = True
+            return httpx.Response(
+                200, json={"results": [{"containerId": "new-id", "containerName": "web", "success": True}]}
+            )
+        if request.url.path.endswith("check-updates"):
+            return httpx.Response(200, json={"results": [{"containerId": "new-id", "hasUpdate": False}]})
+        if request.url.path == "/api/containers":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "new-id" if installed else "old-id",
+                        "name": "web" if identity_matches or not installed else "other",
+                        "image": "nginx:1.27",
+                        "state": "running",
+                        "labels": {},
+                    }
+                ],
+            )
+        return httpx.Response(200, json={"pendingUpdates": []})
+
+    reader.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+    reader.store = Store(tmp_path / "marker.db")
+    reader.checked["host"] = {"old-id": row()}
+    await install(reader, "host", selections, lambda: None, lambda *_: None)
+    replacement = reader.status["host"].containers[0]
+    assert replacement.container_id == "new-id"
+    assert replacement.status == ("updated" if identity_matches else "unknown")
+    assert replacement.checked_at is None and replacement.image_update is None
+    assert bool(replacement.updated_at) == identity_matches
+    assert [r.url.path for r in calls if r.method == "POST"] == ["/api/containers/batch-update"]
+    await reader.aclose()
+
+    restored = DockhandReader(reader.cfg, store=reader.store, transport=httpx.MockTransport(respond))
+    fresh = replacement.model_copy(update={"status": "unknown", "updated_at": None, "source": None})
+    merged = restored._merge("host", [fresh])[0]
+    assert merged.status == replacement.status
+    assert merged.updated_at == replacement.updated_at
+    if identity_matches:
+        positive = fresh.model_copy(update={"status": "update", "image_update": True})
+        assert restored._merge("host", [positive])[0].status == "update"
+        restored.checked["host"]["new-id"] = replacement
+        local = fresh.model_copy(update={"status": "local"})
+        assert restored._merge("host", [local])[0].status == "local"
+        assert "new-id" not in restored.checked["host"]
+        restored.checked["host"]["new-id"] = replacement
+        await restored._check("host", 1)
+        result = restored.status["host"].containers[0]
+        assert result.status == "current" and result.image_update is False
+        assert result.checked_at is not None and result.updated_at is None
+    await restored.aclose()
+    reader.store.close()

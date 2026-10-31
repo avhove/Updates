@@ -319,7 +319,7 @@ def create_app(
                     "containers": [
                         c.model_copy(
                             update={
-                                "status": "current" if c.status == "unknown" else c.status,
+                                "status": "current" if c.status in {"unknown", "updated"} else c.status,
                                 "checked_at": now,
                                 "source": "fleetdeck_button",
                             }
@@ -409,7 +409,16 @@ def create_app(
                 demo_dockhand[req.target_id] = current.model_copy(
                     update={
                         "containers": [
-                            c.model_copy(update={"status": "current", "image_update": False})
+                            c.model_copy(
+                                update={
+                                    "status": "updated",
+                                    "image_update": None,
+                                    "checked_at": None,
+                                    "updated_at": datetime.now(UTC),
+                                    "source": "fleetdeck_update",
+                                    "check_issue": None,
+                                }
+                            )
                             if c.container_id in ids
                             else c
                             for c in current.containers

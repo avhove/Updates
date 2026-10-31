@@ -28,6 +28,7 @@ class ContainerStatus(BaseModel):
     stack: str | None = None
     status: str = "unknown"
     checked_at: datetime | None = None
+    updated_at: datetime | None = None
     source: str | None = None
     image_update: bool | None = None
     newer_version: str | None = Field(default=None, max_length=128)
@@ -568,6 +569,9 @@ class DockhandReader:
             old = known.get(item.container_id)
             if old and old.image != item.image:
                 old = None
+            if old and old.status == "updated" and item.status != "unknown":
+                known.pop(item.container_id, None)
+                old = None  # Explicit provider findings supersede a deployment-only marker.
             if item.status == "excluded":
                 known.pop(item.container_id, None)
                 continue
@@ -582,7 +586,7 @@ class DockhandReader:
                 items[index] = record
             else:
                 items[index] = retain_findings(item, old)
-            if items[index].checked_at is not None or items[index].status == "update":
+            if items[index].checked_at is not None or items[index].status in {"update", "updated"}:
                 known[item.container_id] = items[index]
         return items
 
