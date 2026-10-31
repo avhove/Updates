@@ -760,3 +760,10 @@ confirmed readable separate scopes and no page overflow. Desktop table layout is
 
 Mobile card follow-up: backup age and schedule coverage now sit on the right of the OS metric
 row, above the bottom action/More row, whether or not the machine has a primary action.
+
+Mobile spacing adapts to available actions: a menu-only OS section shares the counts/backup row
+instead of reserving a separate action row. Container counts sit beside check history at widths
+from 375px upward; narrower screens keep a stacked arrangement. Empty intervening grid rows and
+excess count margins were removed. Actual Update/Boot up/Reboot buttons keep their own bottom row.
+Simulated browser checks at 320, 390 and 768px show no page overflow. The Simulated Dockhand tag
+is a demo-only replacement for a live manager link, not a production provider status.
