@@ -543,7 +543,7 @@ class DockhandReader:
             raise ValueError("Unmatched execution")
         return summary, scheduled_results(execution, containers, environment_id)
 
-    def request_check(self, target_id: str, *, scheduled: bool = False) -> None:
+    def request_check(self, target_id: str, *, scheduled: bool = False, following_update: bool = False) -> None:
         if not self.cfg.allow_checks:
             raise PermissionError("Enable dockhand.allow_checks in Settings to allow explicit Dockhand checks")
         mapping = next((m for m in self.cfg.environments if m.target_id == target_id), None)
@@ -552,7 +552,7 @@ class DockhandReader:
         if (
             target_id in self.updating
             or target_id in self.tasks
-            or time.monotonic() - self.last_started.get(target_id, -60) < 30
+            or (not following_update and time.monotonic() - self.last_started.get(target_id, -60) < 30)
         ):
             raise ValueError("A Dockhand check is running or was started recently; wait before retrying")
         if len(self.tasks) >= 4:
