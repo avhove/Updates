@@ -1657,6 +1657,12 @@ test("Dockhand installs are opt-in, select running containers by default and req
     ];
     const target = machine('dh-install', { view: { dockhand_updates_allowed: true, dockhand: { stale: false, containers: rows } } });
     const ui = await dashboard({ targets: [target], mobile });
+    ui.click('[data-open-docker="dh-install"][data-container-filter="all"]');
+    const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
+    assert.equal(panel.querySelector('.group-head [data-dockhand-update]'), null);
+    assert.ok(panel.querySelector('.group-head [data-dockhand-check]'));
+    assert.equal(panel.querySelectorAll('.container-results-table [data-dockhand-update]').length, 2);
+    assert.ok(ui.document.querySelector(mobile ? '.mc-containers .scope-actions [data-dockhand-update]' : '[data-container-row] .scope-actions [data-dockhand-update]'));
     ui.click('[data-dockhand-update="dh-install"]'); await flush();
     const doc = ui.document;
     assert.equal(doc.querySelector('#dockhand-update-dialog').open, true);

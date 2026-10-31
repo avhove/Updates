@@ -887,3 +887,7 @@ Cancel starts nothing; **Check OS only** checks OS packages; **Check OS & contai
 OS packages plus eligible native and permitted Dockhand hosts. With no eligible native hosts,
 Check all runs OS and permitted Dockhand checks directly. The separate **Check container updates**
 menu action stays container-only, retaining download confirmation when native hosts are included.
+
+Dockhand details headers contain the check action and manager link, without a duplicate
+bulk Update button. Bulk selection remains available on the host’s container row; eligible
+containers retain their individual Update action in the details table.
