@@ -710,6 +710,12 @@ function requestContainerChecks() {
   return requestDockhandChecks();
 }
 
+async function runContainerChecks(ids) {
+  await act("stacks", nativeContainerHosts().filter(v => ids.includes(v.target.id)).map(v => v.target.id));
+  await requestDockhandChecks(ids);
+  schedule(1000);
+}
+
 async function checkOsUpdates() {
   const button = $("#check-os");
   if (button.disabled) return;
@@ -754,6 +760,11 @@ async function act(action, ids, { rebootIfRequired = false, snapshotFirst = fals
 }
 
 const CONFIRM = {
+  checkall: {
+    title: "What would you like to check?",
+    text: "Check OS updates only, or include containers. Fleetdeck native container checks download Compose images, using bandwidth and disk space. Dockhand checks registry metadata without downloading image layers. Nothing is installed or restarted.",
+    ok: "Check OS & containers",
+  },
   start: { title: "Boot up this guest?", text: "Starts the stopped VM or LXC through Proxmox. Its configured services and containers may start with it. No updates are installed. Requires VM.PowerMgmt permission in Proxmox.", ok: "Boot up" },
   containers: {
     title: "Check container images?",
@@ -793,6 +804,7 @@ function confirmAction(action, ids) {
   $("#confirm-title").textContent = c.title;
   $("#confirm-text").textContent = c.text;
   const upgradeAction = action === "upgrade";
+  $("#confirm-os-only").hidden = action !== "checkall";
   $("#confirm").classList.toggle("upgrade-confirm", upgradeAction);
   $("#confirm-symbol").innerHTML = icon(upgradeAction ? "download" : action === "reboot" ? "reboot" : action === "backup" ? "backup" : "refresh");
   $("#confirm-ok").innerHTML = `${upgradeAction ? icon("download") : ""}<span>${esc(upgradeAction && ids.length > 1 ? `Update ${ids.length} machines` : c.ok)}</span>`;
@@ -832,6 +844,7 @@ function confirmAction(action, ids) {
       ].filter(Boolean).join("");
     }
     if (action === "backup" || action === "stacks" || action === "dockhand") detail = "";
+    if (action === "checkall") detail = v?.dockhand ? "OS + Dockhand registry check (when allowed)" : nativeContainerHosts().some(host => host.target.id === id) ? "OS + native container image downloads" : "OS only";
     if (action === "containers") detail = v?.dockhand ? "Dockhand · registry metadata only" : "Fleetdeck native · downloads Compose images";
     if (action === "reboot") {
       detail = v?.check?.reboot_required ? "reboot needed" : "";
@@ -868,11 +881,20 @@ function confirmAction(action, ids) {
   dlg.returnValue = "";
   dlg.showModal();
   dlg.addEventListener("close", async () => {
+    if (action === "checkall") {
+      if (!["ok", "os"].includes(dlg.returnValue)) return;
+      const includeContainers = dlg.returnValue === "ok";
+      const button = $("#check-all");
+      button.disabled = true;
+      try {
+        await checkOsUpdates();
+        if (includeContainers) await runContainerChecks(ids);
+      } finally { button.disabled = false; }
+      return;
+    }
     if (dlg.returnValue !== "ok") return;
     if (action === "containers") {
-      await act("stacks", ids.filter(id => { const v = state.targets.find(v => v.target.id === id); return v && !v.dockhand && dockerEnabled(v); }));
-      await requestDockhandChecks(ids);
-      schedule(1000);
+      await runContainerChecks(ids);
       return;
     }
     if (action === "dockhand") {
@@ -1150,10 +1172,14 @@ $("#check-containers").onclick = requestContainerChecks;
 $("#check-all").onclick = async () => {
   const button = $("#check-all");
   if (button.disabled) return;
+  if (nativeContainerHosts().length) {
+    confirmAction("checkall", active().map(v => v.target.id));
+    return;
+  }
   button.disabled = true;
   try {
     await checkOsUpdates();
-    await requestContainerChecks();
+    await requestDockhandChecks();
   } finally {
     button.disabled = false;
   }

@@ -194,7 +194,8 @@ dialog input[type="text"] { margin: 2px 0 6px; }
 #confirm .confirm-option small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
 #confirm .confirm-option[hidden], #confirm-reboot-note[hidden] { display: none; }
 #confirm-reboot-note { font-size: 12px; }
-#confirm menu { border-top: 1px solid var(--border); padding-top: 16px; }
+#confirm-os-only[hidden] { display: none; }
+#confirm menu { flex-wrap: wrap; border-top: 1px solid var(--border); padding-top: 16px; }
 
 .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; opacity: .7; }
 @keyframes spin { to { transform: rotate(360deg); } }

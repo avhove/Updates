@@ -1746,3 +1746,46 @@ test("coverage stays in details without replacing the overall up-to-date status"
     assert.equal(ui.calls.some(c=>c.method==='POST'),false);
   }
 });
+
+test("Check all offers scopes before starting anything when native image downloads are included", async () => {
+  for (const answer of ['cancel','os','ok']) {
+    const ui=await dashboard({dockhandChecks:true, targets:[
+      machine('native',{check:{docker_installed:true}}),
+      machine('dockhand',{view:{dockhand:{stale:false,containers:[]}}}), machine('os'),
+    ]});
+    await ui.document.querySelector('#check-all').onclick();
+    const dialog=ui.document.querySelector('#confirm');
+    assert.equal(dialog.open,true);
+    assert.equal(ui.document.querySelector('#confirm-os-only').hidden,false);
+    assert.equal(ui.document.querySelector('#confirm-os-only').textContent,'Check OS only');
+    assert.equal(ui.document.querySelector('#confirm-ok').textContent,'Check OS & containers');
+    assert.equal(ui.calls.some(c=>c.method==='POST'),false);
+    dialog.returnValue=answer; dialog.dispatchEvent(new ui.window.Event('close')); await flush(); await flush();
+    const actions=ui.calls.filter(c=>c.path==='/api/actions').map(c=>JSON.parse(c.body));
+    assert.deepEqual(actions.map(c=>c.action),answer==='cancel'?[]:answer==='os'?['check']:['check','stacks']);
+    if(answer==='ok') assert.deepEqual(actions[1].target_ids,['native']);
+    assert.equal(ui.calls.filter(c=>c.path==='/api/dockhand/check').length,answer==='ok'?1:0);
+    assert.equal(ui.document.querySelector('#check-all').disabled,false);
+    // Container-only and other confirmations must not inherit the OS-only choice.
+    await ui.document.querySelector('#check-containers').onclick();
+    assert.equal(ui.document.querySelector('#confirm-os-only').hidden,true);
+    assert.equal(ui.document.querySelector('#confirm-ok').textContent,'Check containers');
+  }
+});
+
+test("Check all skips the popup without eligible native image downloads and respects Dockhand permission", async () => {
+  for(const allowed of [false,true]) {
+    const ui=await dashboard({dockhandChecks:allowed,targets:[
+      machine('dh',{view:{dockhand:{stale:false,containers:[]}}}),
+      machine('disabled',{check:{docker_installed:true},view:{docker_settings:{mode:'disabled'}}}),
+      machine('check-only',{target:{check_only:true},check:{docker_installed:true}}),
+      machine('busy',{check:{docker_installed:true},view:{active_job:{action:'check',status:'running'}}}),
+      machine('os'),
+    ]});
+    await ui.document.querySelector('#check-all').onclick();
+    assert.notEqual(ui.document.querySelector('#confirm').open,true);
+    const actions=ui.calls.filter(c=>c.path==='/api/actions').map(c=>JSON.parse(c.body));
+    assert.deepEqual(actions.map(c=>c.action),['check']);
+    assert.equal(ui.calls.filter(c=>c.path==='/api/dockhand/check').length,allowed?1:0);
+  }
+});

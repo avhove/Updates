@@ -881,3 +881,9 @@ overall host status. If only coverage exceptions remain, the host summary says *
 Updates, review findings, running checks, stale data and errors retain their existing priority.
 Individual unknown/local/excluded results and unavailable counts remain explicit; the summary
 does not turn them into successful checks. An empty inventory still says **Not checked**.
+
+**Check all** asks for scope only when eligible native Docker checks would download images:
+Cancel starts nothing; **Check OS only** checks OS packages; **Check OS & containers** checks
+OS packages plus eligible native and permitted Dockhand hosts. With no eligible native hosts,
+Check all runs OS and permitted Dockhand checks directly. The separate **Check container updates**
+menu action stays container-only, retaining download confirmation when native hosts are included.
