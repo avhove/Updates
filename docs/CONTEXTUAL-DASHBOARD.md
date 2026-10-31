@@ -720,3 +720,16 @@ controls native container updates. Machine information and Docker management rem
 Reboot glyphs are centered in their square badge again; a desktop-only outer offset aligns the glyph
 with the other metrics. Mobile keeps its original badge and icon sizing.
 Native container summaries now say Up to date; Compose-only coverage remains explained in the details.
+
+### Mobile readability and distinct menu icons
+
+Update command uses a terminal glyph; Docker management keeps the settings gear. Refresh inventory
+uses a scan/search glyph, distinct from the fresh-check arrows. Labels and action behavior are unchanged.
+Phone headers keep branding and controls on one line. Mobile cards put OS metrics, the action and
+More menu in one footer instead of stacking the buttons; status text reads across the card width.
+Container cards follow the same layout, with the manager link/tag kept beside More. Long machine
+tags wrap without hiding identity. Container detail statuses now stack their separate findings
+vertically instead of flowing into two narrow grid columns. Native and Dockhand actions, timestamps,
+filters, confirmations and policy guards are unchanged.
+Verification: 66 offline UI tests pass, including distinct menu glyphs. Simulated browser checks
+at 320, 390 and 768 pixels show no page overflow; desktop remains a table. No homelab requests.

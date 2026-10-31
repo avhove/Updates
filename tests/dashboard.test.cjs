@@ -1567,3 +1567,11 @@ test("container menus omit machine information and provider management and use a
     assert.ok(menu.querySelector('[data-docker-settings]'));
   }
 });
+
+test("inventory discovery and update configuration use distinct menu icons", async () => {
+  const ui = await dashboard({ targets: [machine('menu-icons')] });
+  const glyph = selector => ui.document.querySelector(selector).innerHTML;
+  assert.notEqual(glyph('#refresh svg'), glyph('#check-os svg'));
+  ui.click('[data-machine-menu="menu-icons"][data-menu-scope="machine"]');
+  assert.notEqual(glyph('#machine-actions [data-docker-settings] svg'), glyph('#machine-actions [data-cmd] svg'));
+});

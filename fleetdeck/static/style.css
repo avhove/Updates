@@ -1064,3 +1064,55 @@ a.brand { color: var(--text); text-decoration: none; }
 .dashboard-page .machine-table > tbody.machine-rows > tr > td.scope-metrics { padding-inline:0; }
 .dashboard-page .machine-table .scope-metrics .reboot-status.required { justify-content:center; padding:0; margin-inline:-3px 3px; flex:none; box-sizing:border-box; }
 .dashboard-page .machine-table .scope-metrics .reboot-status .ui-icon { width:16px; height:16px; flex:none; }
+
+/* Phone/tablet cards: full-width reading, with metrics and actions in one footer. */
+@media (max-width:1119px) {
+  .dashboard-page #check-all span { display:inline; }
+  .dashboard-page #check-all::after { content:none; }
+  .mc-card .mc-os-scope, .mc-card .mc-containers { grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; }
+  .mc-card .mc-status-group { grid-column:1 / -1; grid-row:2; }
+  .mc-card .mc-os-scope .mc-counts.os-metrics { grid-column:1; grid-row:3; margin:0; padding:0; }
+  .mc-card .mc-os-scope .mc-footer, .mc-card .mc-os-scope .mc-utility-row { grid-column:2; grid-row:3; display:flex; flex-direction:row; align-items:center; align-self:center; gap:4px; }
+  .mc-card .mc-footer button.more-actions, .mc-card .mc-utility-row button.more-actions, .mc-card .scope-actions button.more-actions { width:44px; height:44px; min-height:44px; }
+  .mc-card .mc-action > button { min-height:40px; height:40px; width:88px; }
+  .mc-card .mc-containers > .container-status-hit { grid-column:1 / -1; grid-row:2; }
+  .mc-card .mc-container-check { grid-column:1 / -1; grid-row:3; margin:0; }
+  .mc-card .mc-containers > .container-indicators { grid-column:1; grid-row:4; }
+  .mc-card .mc-containers > .scope-actions { grid-column:2; grid-row:4; display:flex; flex-direction:row; align-items:center; gap:4px; max-width:150px; }
+  .mc-card .scope-actions .docker-status-link { max-width:100px; }
+  .mc-card .container-indicators, .mc-card .os-metrics { row-gap:0; }
+  .mc-card .mc-scope-title { margin-bottom:0; }
+  .mc-card .machine-main:has(.monitor-policy) { flex-wrap:wrap; }
+  .mobile-layout .docker-host .group-head { display:flex; gap:8px; padding:12px; border-bottom:1px solid var(--border); }
+  .mobile-layout .docker-host .group-head .host-mode { margin-left:auto; }
+}
+@media (max-width:520px) {
+  .dashboard-page > header { display:flex; flex-direction:row; align-items:center; flex-wrap:nowrap; gap:6px; padding:8px 10px; }
+  .dashboard-page > header h1 { flex:none; margin:0; }
+  .dashboard-page .toolbar { width:auto; flex:0 1 auto; margin-left:auto; gap:4px; }
+  .dashboard-page .toolbar > #check-all { flex:none; padding-inline:8px; }
+  .dashboard-page #check-all span { display:inline; }
+  .dashboard-page #check-all::after { content:none; }
+  .dashboard-page .toolbar > .icon, .dashboard-page .toolbar > .dashboard-menu > summary { width:36px; min-width:36px; }
+  .dashboard-page main { padding-top:16px; }
+  .dashboard-page .updates-legend { gap:6px; margin-bottom:10px; }
+  .dashboard-page .updates-legend-group { gap:6px 10px; }
+  .mc-card { padding:12px; }
+  .mc-card .mc-containers > .scope-actions { max-width:132px; }
+  .mc-card .scope-actions .docker-status-link { max-width:84px; }
+  .mobile-layout .docker-host .container-results-table tr:not(.pkgs) { padding:12px; }
+}
+@media (max-width:359px) {
+  .dashboard-page #check-all .ui-icon { display:none; }
+  .dashboard-page .brand { gap:5px; }
+  .dashboard-page .logo { width:24px; height:24px; }
+  .mc-card .mc-action > button { width:78px; }
+}
+@media(max-width:1119px) {
+  .mc-card .mc-containers > .scope-actions { flex-wrap:nowrap; }
+  .mc-card .scope-actions > .chip { display:block; max-width:84px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+}
+@media(max-width:900px) {
+  .dashboard-page .mobile-layout .group .container-results-table tr:not(.pkgs) > td[data-label="Status"] { display:block; padding-block:10px; }
+  .dashboard-page .mobile-layout .group .container-results-table td[data-label="Status"]::before { display:none; }
+}
