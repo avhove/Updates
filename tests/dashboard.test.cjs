@@ -22,7 +22,7 @@ function machine(id, options = {}) {
   };
 }
 
-async function dashboard({ containers = true, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false, management = {} } = {}) {
+async function dashboard({ containers = true, dockhandChecks = false, scheduledContainers = false, targets = [], rememberedView = "machines", schedule = null, mobile = false, management = {}, actionResponse = { jobs: [], rejected: {} } } = {}) {
   const { window, document } = parseHTML(read("index.html"));
   const calls = [], errors = [], storage = new Map([["dashboardView", JSON.stringify(rememberedView)]]);
   let activeElement = document.body;
@@ -67,7 +67,7 @@ async function dashboard({ containers = true, dockhandChecks = false, scheduledC
       }
       else if (path === "/api/setup/apply") body = { restarting: true };
       else if (path === "/api/docker-settings") body = { docker_settings: JSON.parse(options.body) };
-      else if (path === "/api/actions") body = { jobs: [], rejected: {} };
+      else if (path === "/api/actions") body = actionResponse;
       else if (path === "/api/dockhand/check") body = { started: true };
       else if (path.startsWith('/api/dockhand/update-options')) {
         const id = decodeURIComponent(path.split('target_id=')[1]);
@@ -1868,5 +1868,44 @@ test("native and link-only container details retain close controls", async () =>
     ui.click('.detail-close-top[data-close-details="containers"]');
     assert.equal(ui.state.containerExpanded.has('host'),false);
     assert.equal(ui.calls.some(call=>call.method==='POST'),false);
+  }
+});
+
+
+test("accepted guest boot spins through queued/running jobs and stops on completion or failure", async () => {
+  for (const mobile of [false, true]) {
+    for (const kind of ['vm', 'lxc']) {
+      const target = machine('guest', { guest: true, target: { kind, can_start: true, status: 'stopped', updatable: false }, view: { check: null } });
+      const job = { id: 'boot-job', target_id: 'guest', action: 'start', status: 'queued' };
+      const ui = await dashboard({ mobile, targets: [target], actionResponse: { jobs: [job], rejected: {} } });
+      ui.click('[data-act="start"]');
+      const dialog = ui.document.querySelector('#confirm');
+      dialog.returnValue = 'ok'; dialog.dispatchEvent(new ui.window.Event('close')); await flush();
+      const status = () => ui.document.querySelector(mobile ? '.mc-status-group' : '.update-status-cell');
+      assert.match(status().textContent, /Booting up…/);
+      assert.ok(status().querySelector('.spin'));
+      assert.equal(ui.document.querySelector('[data-act="start"]'), null);
+      job.status = 'running';
+      target.target.status = 'running';
+      await ui.load();
+      assert.match(status().textContent, /Booting up…/, 'wait for job confirmation even if discovery already says running');
+      target.active_job = null;
+      target.target.updatable = true;
+      target.target.can_start = false;
+      await ui.load();
+      assert.equal(status().querySelector('.spin'), null);
+      assert.match(status().textContent, /Not checked/, 'boot completion does not invent an OS check');
+      target.target.status = 'stopped';
+      target.target.updatable = false;
+      target.target.can_start = true;
+      target.active_job = { ...job, status: 'running' };
+      await ui.load();
+      assert.ok(status().querySelector('.spin'));
+      target.active_job = null;
+      await ui.load();
+      assert.equal(status().querySelector('.spin'), null);
+      assert.match(status().textContent, /Not running/);
+      assert.ok(ui.document.querySelector('[data-act="start"]'));
+    }
   }
 });
