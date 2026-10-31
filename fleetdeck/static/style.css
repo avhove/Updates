@@ -1307,7 +1307,13 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .mc-card:not(:has(.mc-os-scope)):has(.mc-details) .mc-containers > .container-indicators { grid-column: 1; }
   .dashboard-page .mc-card:not(:has(.mc-os-scope)) .mc-containers:has(> .mc-container-check:empty) > .scope-actions { grid-row: 4; }
   .dashboard-page .mc-card:not(:has(.mc-os-scope)) > .mc-details { grid-column: 2; grid-row: 3; margin: 0; align-self: center; text-align: right; }
-  .dashboard-page .mc-card:not(:has(.mc-os-scope)) .mc-detail-line { grid-template-columns: auto auto; gap: 6px; }
+  .dashboard-page .mc-card .mc-detail-line { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
   .dashboard-page .mc-card:not(:has(.mc-os-scope)) .mc-backup-value { justify-content: flex-end; }
+  .dashboard-page .group .container-results-table tr:not(.pkgs) > td[data-label="Last checked"] { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: 12px; line-height: 18px; padding-top: 0; }
+  .dashboard-page .container-results-table td[data-label="Last checked"]::before { content: attr(data-mobile-label); font-size: inherit; line-height: inherit; letter-spacing: normal; text-transform: none; white-space: nowrap; }
+  .dashboard-page .group .container-results-table tr:not(.pkgs) > td[data-label="Action"] { display: block; padding-top: 10px; }
+  .dashboard-page .container-results-table .container-attempt-prefix { display: none; }
+  .dashboard-page .container-results-table td[data-label="Action"]::before { display: none; }
+  .dashboard-page .group .container-results-table tr:not(.pkgs) > td[data-label="Action"]:empty { display: none; }
   .dashboard-page .container-results-table td[data-label="Action"] > button { justify-self: start; width: auto; min-width: 92px; min-height: 42px; padding: 7px 14px; font-size: 14px; }
 }
