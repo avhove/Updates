@@ -461,8 +461,6 @@ button.login-submit.busy .login-spinner { display: inline-block; }
 .dashboard-page .container-metric-hit:hover { background: transparent; border: 0; }
 .dashboard-page .update-metric.container { background: color-mix(in srgb, var(--container-tone) 11%, var(--panel)); color: var(--container-tone); }
 .dashboard-page .update-metric.container.unknown { background: var(--chip); color: var(--muted); }
-.container-manager-symbol { display: inline-flex; position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); color: var(--muted); }
-.container-manager-symbol .ui-icon { width: 13px; height: 13px; }
 .containers-cell { text-align: center; }
 .dashboard-page .machine-table .container-heading { text-align: center; }
 .scope-headings th { text-align: center; font-weight: 500; padding: 7px; background: var(--panel-2); }
@@ -846,7 +844,6 @@ a.brand { color: var(--text); text-decoration: none; }
 /* Provider-neutral container indicators and compact, shared details. */
 .container-indicators { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 2px 4px; max-width: 132px; margin: auto; }
 .dashboard-page .container-indicator.container-metric-hit { min-width: 28px; min-height: 32px; }
-.container-indicators .container-manager-symbol { position: static; transform: none; padding: 2px; }
 .container-indicators .update-metric { gap: 4px; }
 .container-indicators .update-metric .ui-icon { width: 14px; height: 14px; }
 .container-review-tone { color: var(--accent); }

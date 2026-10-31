@@ -363,7 +363,7 @@ class DockhandConfig(BaseModel):
     url: str = Field(max_length=2048)
     token: str = Field(min_length=1, max_length=4096, repr=False)
     poll_seconds: int = Field(300, ge=60, le=86400)
-    # Explicit user-triggered registry checks only; cached status stays read-only by default.
+    # Allow manual or scheduled registry checks; ordinary report polling remains read-only.
     allow_checks: bool = False
     environments: list[DockhandEnvironment] = Field(min_length=1, max_length=32)
 

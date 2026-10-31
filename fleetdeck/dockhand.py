@@ -600,7 +600,7 @@ class DockhandReader:
 
     async def _check(self, target_id: str, environment_id: int, *, scheduled: bool = False) -> None:
         try:
-            # A fixed JSON endpoint returns the complete per-container result. No deployment endpoints exist here.
+            # This endpoint checks registry metadata only; deployments live in dockhand_updates.py.
             async with asyncio.timeout(180):
                 containers = await self._get("containers", environment_id)
                 response = await self.client.post(
@@ -784,7 +784,7 @@ class DockhandReader:
             self.next_poll = time.monotonic() + self.cfg.poll_seconds
 
     async def _get(self, path: str, env: int):
-        # These are the only outgoing routes and methods; never forward browser-supplied paths.
+        # Report reads use fixed internal paths; never forward browser-supplied routes.
         return await self._read_json(path, {"env": env})
 
     async def _read_json(self, path: str, params: dict):

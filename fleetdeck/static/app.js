@@ -293,7 +293,7 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     ${!showOs ? identityCells : ""}
     <td class="scope-cell section-start" data-label="Scope">${containerScope(v)}</td>
     <td class="container-status-cell" data-label="Container status"><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button></td>
-    <td class="containers-cell scope-metrics" data-label="Updates">${dockerCell(v, false)}</td>
+    <td class="containers-cell scope-metrics" data-label="Updates">${dockerCell(v)}</td>
     <td class="last-check container-check" data-label="Containers checked">${containerCheckTime(v)}</td>
     ${!showOs ? sharedBackup : ""}
     <td class="container-action-cell section-start" data-label="Container actions"><div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></td>
@@ -309,7 +309,7 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
       ${showOs ? `<section class="mc-os-scope" aria-label="${esc(t.name)} operating system"><div class="mc-scope-title">Operating system</div><div class="mc-status-group">${osStatus}<div class="mc-check-line"><span class="mc-check-time">${c?.error ? "Attempt" : "Checked"} ${c ? ago(c.checked_at) : "Never"}</span></div></div>
       ${hasMetrics || reboot ? `<div class="mc-counts os-metrics">${metrics}${reboot ? `<span class="mc-reboot">${reboot}</span>` : rebootSlot}</div>` : ""}
       ${action ? `<div class="mc-footer"><div class="mc-action">${action}</div>${more}</div>` : `<div class="mc-utility-row">${more}</div>`}</section>` : ""}
-      ${hasContainers ? `<section class="mc-containers" aria-label="${esc(t.name)} containers"><div class="mc-scope-title">${containerScope(v)}</div><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button><div class="mc-container-check muted">${containerCheckTime(v, true)}</div>${dockerCell(v, false)}<div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></section>` : ""}
+      ${hasContainers ? `<section class="mc-containers" aria-label="${esc(t.name)} containers"><div class="mc-scope-title">${containerScope(v)}</div><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button><div class="mc-container-check muted">${containerCheckTime(v, true)}</div>${dockerCell(v)}<div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></section>` : ""}
       ${backup ? `<div class="mc-details"><div class="mc-detail-line"><span>Backup</span><div class="mc-backup-value">${backup}${backupJobCell(t)}</div></div></div>` : ""}
     </article>`;
   }

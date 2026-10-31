@@ -113,7 +113,7 @@ function containerScope(v) {
   return `Containers<span class="scope-provider" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(external ? "external" : "server")}</span>`;
 }
 
-function dockerCell(v, withManager = true) {
+function dockerCell(v) {
   if (!hasDocker(v)) return "";
   const empty = filter => `<span class="metric-slot-empty" data-metric-slot="${filter}" aria-hidden="true"></span>`;
   const policy = dockerSettings(v);
@@ -128,7 +128,7 @@ function dockerCell(v, withManager = true) {
   body += s.coverage ? badge("coverage", "coverage", s.coverage,
     `${s.coverage} coverage ${plural(s.coverage, "exception", "exceptions")}: local, excluded, new or unmatched containers`, "container-coverage") : empty("coverage");
   body += s.failures ? badge("failures", "alert", s.failures, `${s.failures} ${plural(s.failures, "latest container or stack check failed", "latest container or stack checks failed")}; known updates are retained`, "container-failure") : empty("failures");
-  return `<span class="container-indicators">${body}${withManager ? `<span class="container-manager-symbol" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(s.provider === "dockhand" ? "external" : "server")}</span>` : ""}</span>`;
+  return `<span class="container-indicators">${body}</span>`;
 }
 
 function containerResult(row, checking = false) {
@@ -180,7 +180,7 @@ function containerName(row) {
 }
 
 function containerPanel(v) {
-  const s = containerSummary(v), id = esc(v.target.id), dh = v.dockhand, native = s.provider === "native";
+  const s = containerSummary(v), id = esc(v.target.id), native = s.provider === "native";
   const requestedFilter = state.containerFilters?.[v.target.id] || "all";
   const filter = requestedFilter === "coverage" && !s.coverage ? "all" : requestedFilter, compare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   const items = [...s.rows].sort((a, b) => compare(a.stack || "Standalone", b.stack || "Standalone") || compare(a.name, b.name) || compare(a.image, b.image));
@@ -212,7 +212,6 @@ function containerPanel(v) {
   return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("container")}${esc(v.target.name)}<span class="host-mode muted">${esc(mode)}</span>${button}${native ? `<button class="small" data-docker-settings="${id}">Settings</button>` : managerLink(v, "Open Dockhand")}</div><div class="container-overview"><div class="container-results-toolbar">${filters}<span class="container-sync muted">${native ? (s.error ? "Last attempt" : "Checked") : "Synced"} ${s.syncedAt ? ago(s.syncedAt) : "never"}${s.stale ? " · last-known results" : ""}</span></div>${notices}${scope}${prune}${categoryNote}${guidance}</div>${shown.length ? table : `<p class="container-empty muted">${s.rows.length ? "No matching per-container results in this category." : native ? (!v.stacks ? "Container images have not been checked. Fetch image updates to compare Compose images; nothing is restarted." : "No Docker Compose stacks found. Standalone containers are not checked by Fleetdeck; their update status is unknown.") : "Container status unavailable."}</p>`}</section>`;
 }
 
-function dockhandPanel(v) { return containerPanel(v); }
 function stackPanel(v) {
   if (v.dockhand || dockerEnabled(v)) return containerPanel(v);
   const policy = dockerSettings(v), id = esc(v.target.id);
