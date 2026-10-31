@@ -305,7 +305,7 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     <td class="container-action-cell section-start" data-label="Container actions"><div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></td>
   </tr>`;
   if (mobile) {
-    const backup = withBackup ? backupCell(t) : "";
+    const backup = withBackup && (showOs || t.backup?.last || t.backup?.in_job) ? backupCell(t) : "";
     const os = shown?.os || c?.os;
     const action = relation.context ? "" : nextAction(v);
     const more = rowMenu(v);
