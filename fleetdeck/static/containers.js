@@ -17,6 +17,7 @@ function containerView(v) {
       scheduledAt: dh.scheduled_check_at, scheduledStatus: dh.scheduled_status,
       scheduledErrors: dh.scheduled_errors, scheduledChecked: dh.scheduled_checked };
   }
+  if (!dockerEnabled(v)) return { provider: dockerSettings(v).mode, rows: [], scopeGap: false, checking: false, stale: false };
   const r = v.stacks, rows = [];
   for (const stack of r?.stacks || []) {
     for (const service of stack.services || []) {
@@ -63,7 +64,7 @@ function containerStatus(v) {
 function containerCheckTime(v, withLabel = false) {
   const policy = dockerSettings(v), s = containerSummary(v);
   if (policy.mode === "disabled") return '<span class="muted">Disabled</span>';
-  if (!v.dockhand && !dockerEnabled(v)) return '<span class="muted">External manager</span>';
+  if (!v.dockhand && !dockerEnabled(v)) return '<span class="muted" title="Fleetdeck does not check this external manager">Not applicable</span>';
   const relevant = s.rows.filter(r => !["local", "excluded"].includes(r.status));
   const dated = relevant.filter(r => r.checked_at && Number.isFinite(Date.parse(r.checked_at)));
   const times = dated.map(r => Date.parse(r.checked_at));
@@ -98,7 +99,7 @@ function dockerCell(v, withManager = true) {
   const empty = filter => `<span class="metric-slot-empty" data-metric-slot="${filter}" aria-hidden="true"></span>`;
   const policy = dockerSettings(v);
   if (policy.mode === "disabled") return `<span class="container-indicators">${["all", "review", "coverage", "failures"].map(empty).join("")}</span>`;
-  if (!v.dockhand && !dockerEnabled(v)) return `<span class="container-indicators"><button class="container-metric-hit" data-container-filter="all" data-open-docker="${esc(v.target.id)}" aria-label="Container status managed externally; view details">${icon("container")}—</button>${["review", "coverage", "failures"].map(empty).join("")}</span>`;
+  if (!v.dockhand && !dockerEnabled(v)) return '<span class="muted" title="Link-only manager: Fleetdeck does not receive container update results">Not monitored</span>';
   const s = containerSummary(v), id = esc(v.target.id), selected = state.containerFilters?.[v.target.id] || "all";
   const manager = s.provider === "dockhand" ? "Managed externally by Dockhand" : "Managed by Fleetdeck native Docker";
   const badge = (filter, symbol, value, label, tone) => `<button class="container-metric-hit container-indicator ${tone || ""}" data-open-docker="${id}" data-container-filter="${filter}" data-focus-key="docker:${id}:${filter}:${symbol}" aria-expanded="${state.containerExpanded.has(v.target.id) && selected === filter}" title="${esc(label)}" aria-label="${esc(`${label}. ${manager}. View container details`)}"><span class="update-metric ${tone || ""}">${symbol === "spin" ? '<span class="spin"></span>' : icon(symbol)}${value === null ? "" : `<span>${value}</span>`}</span></button>`;

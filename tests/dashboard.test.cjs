@@ -1557,7 +1557,7 @@ test("container menus omit machine information and provider management and use a
     ui.click('[data-machine-menu="scoped-menu"][data-menu-scope="containers"]');
     const menu = ui.document.querySelector('#machine-actions');
     assert.equal(menu.querySelectorAll('[data-machine-info],[data-docker-settings]').length, 0);
-    assert.ok(menu.querySelector('[data-monitor]'));
+    assert.equal(menu.querySelector('[data-monitor]'), null);
     const details = menu.querySelector('[data-open-docker]');
     const check = menu.querySelector('[data-act="dockhand"]');
     assert.match(details.textContent, /View container details/);
@@ -1574,4 +1574,45 @@ test("inventory discovery and update configuration use distinct menu icons", asy
   assert.notEqual(glyph('#refresh svg'), glyph('#check-os svg'));
   ui.click('[data-machine-menu="menu-icons"][data-menu-scope="machine"]');
   assert.notEqual(glyph('#machine-actions [data-docker-settings] svg'), glyph('#machine-actions [data-cmd] svg'));
+});
+
+test("link-only managers have no monitoring controls or cached native update counts", async () => {
+  for (const mobile of [false, true]) {
+    const target = machine('other-manager', { view: { docker_settings: { mode: 'external', manager_name: 'Test manager', manager_url: 'https://manager.example' },
+      stacks: { checked_at: now, docker: 'Docker', stacks: [{ name: 'old', services: [{ name: 'old', image: 'old:latest', status: 'running', outdated: true }] }] } } });
+    const ui = await dashboard({ targets: [target], mobile });
+    const doc = ui.document;
+    assert.match(doc.querySelector('[data-machine-row="other-manager"]').parentNode.textContent, /Not monitored/);
+    assert.equal(doc.querySelectorAll('.container-metric-hit').length, 0);
+    const managerLink = doc.querySelector('a.docker-status-link');
+    assert.equal(managerLink.getAttribute('href'), 'https://manager.example');
+    assert.match(managerLink.textContent, /Test manager/);
+    ui.click('[data-machine-menu="other-manager"][data-menu-scope="containers"]');
+    const menu = doc.querySelector('#machine-actions');
+    assert.equal(menu.querySelector('[data-monitor],[data-act],[data-docker-settings],[data-machine-info]'), null);
+    assert.match(menu.textContent, /View management details/);
+    ui.click('[data-open-docker="other-manager"]');
+    assert.doesNotMatch(doc.querySelector('.docker-host').textContent, /Dockhand|old:latest|Monitor only/);
+    ui.click('[data-machine-menu="other-manager"][data-menu-scope="machine"]');
+    assert.ok(menu.querySelector('[data-monitor]'));
+    ui.click('[data-docker-settings="other-manager"]'); await flush();
+    assert.doesNotMatch(doc.querySelector('#docker-mode-help').textContent, /Dockhand/);
+    assert.match(doc.querySelector('#docker-mode-help').textContent, /Link only/);
+    doc.querySelector('#docker-manager-name').value = 'Another manager';
+    await doc.querySelector('#docker-settings-form').onsubmit({ preventDefault() {} });
+    assert.equal(ui.state.targets[0].docker_settings.manager_name, 'Another manager');
+    assert.match(doc.querySelector('a.docker-status-link').textContent, /Another manager/);
+    assert.equal(ui.calls.some(c => c.path === '/api/actions' || c.path === '/api/dockhand/check' || c.path === '/api/setup/apply'), false);
+  }
+});
+
+test("native container menus keep monitor control and external managers without a URL stay neutral", async () => {
+  const ui = await dashboard({ targets: [machine('native-monitor', { check: { docker_installed: true } }),
+    machine('no-link', { view: { docker_settings: { mode: 'external', manager_name: 'External manager' } } })] });
+  ui.click('[data-machine-menu="native-monitor"][data-menu-scope="containers"]');
+  assert.ok(ui.document.querySelector('#machine-actions [data-monitor]'));
+  assert.ok(ui.document.querySelector('#machine-actions [data-act="stacks"]'));
+  const row = ui.document.querySelector('.container-row[data-machine-row="no-link"]') || ui.document.querySelector('[data-machine-row="no-link"]').parentNode.querySelector('.container-row');
+  assert.equal(row.querySelector('.scope-actions [data-docker-settings], .scope-actions a'), null);
+  assert.match(row.querySelector('.scope-actions').textContent, /External manager/);
 });

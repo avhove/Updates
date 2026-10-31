@@ -218,7 +218,7 @@ function csTip(app) {
     : `Its own update is turned off (community_scripts_update), so after an OS update run "update" inside it if ${app} misbehaves.`);
 }
 
-const dockerSettings = (v) => v.docker_settings || { mode: "managed", manager_name: "Dockhand", manager_url: null };
+const dockerSettings = (v) => v.docker_settings || { mode: "managed", manager_name: v.dockhand ? "Dockhand" : "External manager", manager_url: null };
 const containersVisible = () => true;
 const dockerEnabled = (v) => !v.dockhand && ["managed", "monitor"].includes(dockerSettings(v).mode);
 const hasDocker = (v) => !!v.dockhand || v.check?.docker_installed === true || !!(v.stacks && v.stacks.docker !== "none") || dockerSettings(v).mode !== "managed";
@@ -230,6 +230,7 @@ function managerLink(v, label) {
   const url = dockerSettings(v).manager_url;
   // Treat stored values as untrusted too; never turn a javascript: URL into a link.
   try { if (url && ["http:", "https:"].includes(new URL(url).protocol)) return `<a class="docker-status-link" title="${esc(`Open ${label}`)}" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`; } catch { /* invalid old setting */ }
+  if (!v.dockhand && dockerSettings(v).mode === "external") return `<span class="chip" title="No manager URL configured">${esc(label)}</span>`;
   return `<button class="docker-status-link" data-docker-settings="${esc(v.target.id)}">${esc(label)}</button>`;
 }
 
@@ -488,9 +489,9 @@ function openMachineMenu(id, trigger) {
     (!containerOnly && t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
     (!containerOnly ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
     (!containerOnly && canUpgrade(t) ? `<button data-cmd="${esc(id)}" title="${esc(v.update_command ? `Update runs: ${v.update_command}` : "Use the machine's own update command instead of the built-in OS upgrade")}">${icon("terminal")}Update command…</button>` : "") +
-    `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` +
+    (!containerOnly || dockerEnabled(v) ? `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` : "") +
     (!containerOnly && state.console?.enabled && !["stopped", "offline"].includes(t.status) ? `<button data-run="${esc(id)}">${icon("terminal")}Run command</button>` : "") +
-    (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("list")}View container details</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
+    (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("list")}${!v.dockhand && !dockerEnabled(v) ? "View management details" : "View container details"}</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
   if (!containerOnly) menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
   machineMenuId = id;
   machineMenuFocus = trigger.dataset.focusKey;
@@ -585,6 +586,11 @@ function openMachineInformation(id, trigger) {
 function dockerModeFields() {
   const mode = $("#docker-mode").value, dlg = $("#docker-settings-dialog");
   const external = mode === "external", dockhand = mode === "dockhand";
+  $("#docker-mode-help").textContent = external
+    ? "Link only: Fleetdeck does not read container status, check images or deploy containers. Use the configured manager for these actions. OS updates remain independent."
+    : dockhand ? "Fleetdeck reads saved Dockhand reports and can request fresh digest checks when allowed. Deploy containers in Dockhand. Choosing this provider does not start a check."
+    : mode === "disabled" ? "Fleetdeck will not check or deploy containers on this machine. OS updates remain independent."
+    : `Fleetdeck checks download Compose images after confirmation.${mode === "monitor" ? " Stack deployments are disabled." : " Stack deployments require a separate confirmation."} Choosing this mode does not start a check.`;
   $("#docker-external-fields").hidden = !external;
   $("#docker-manager-url").disabled = !external;
   $("#docker-manager-name").disabled = !external;
@@ -610,8 +616,8 @@ async function openDockerSettings(id) {
   $("#docker-settings-apply").disabled = false;
   $("#docker-settings-title").textContent = `Docker management · ${v.target.name}`;
   $("#docker-mode").value = v.dockhand ? "dockhand" : policy.mode;
-  $("#docker-manager-name").value = policy.manager_name;
-  $("#docker-manager-url").value = policy.manager_url || "";
+  $("#docker-manager-name").value = !v.dockhand && policy.mode === "external" ? policy.manager_name : "External manager";
+  $("#docker-manager-url").value = !v.dockhand && policy.mode === "external" ? policy.manager_url || "" : "";
   $("#dockhand-token").value = "";
   $("#docker-settings-error").textContent = "";
   $("#docker-settings-status").textContent = "Loading current options…";
@@ -634,8 +640,8 @@ async function openDockerSettings(id) {
     $("#dockhand-shared-note").textContent = data.shared_hosts
       ? `Connection options affect all ${data.shared_hosts} mapped ${plural(data.shared_hosts, "machine", "machines")}. The environment ID applies only to this machine.`
       : "Enter the Dockhand connection once, then select an environment ID for each machine.";
-    $("#docker-settings-status").textContent = !data.writable ? "Configuration is read-only. Change Dockhand mappings in Settings or in the server configuration."
-      : data.restart_pending ? "Saved configuration changes are waiting to be applied." : "Dockhand connection or provider changes need Save, then Apply. Native-only policies apply immediately.";
+    $("#docker-settings-status").textContent = !data.writable ? "Configuration is read-only. Connection mappings must be changed in the server configuration."
+      : data.restart_pending ? "Saved configuration changes are waiting to be applied." : data.mode === "dockhand" ? "Dockhand connection or provider changes need Save, then Apply." : "Changes apply immediately. Saving does not start a check or deploy containers.";
     $("#docker-settings-apply").hidden = !data.restart_pending || !data.can_restart;
   } catch (err) {
     if (dlg.dataset.requestKey === requestKey) { $("#docker-settings-error").textContent = err.message; dlg.dataset.writable = "false"; }

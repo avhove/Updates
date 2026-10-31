@@ -65,8 +65,8 @@ def test_api_settings_persist_and_are_enforced_for_bulk_actions(tmp_path):
         data = {
             "target_id": tid,
             "mode": "external",
-            "manager_name": "Dockhand",
-            "manager_url": "https://dockhand.example",
+            "manager_name": "Test manager",
+            "manager_url": "https://manager.example",
         }
         assert client.put("/api/docker-settings", json=data).status_code == 200
         result = client.post("/api/actions", json={"action": "stacks", "target_ids": [tid]}).json()
@@ -77,7 +77,8 @@ def test_api_settings_persist_and_are_enforced_for_bulk_actions(tmp_path):
     with TestClient(create_app(cfg)) as client:
         vm = next(v for v in client.get("/api/targets").json()["targets"] if v["target"]["id"] == tid)
         assert vm["docker_settings"]["mode"] == "external"
-        assert vm["docker_settings"]["manager_url"] == "https://dockhand.example"
+        assert vm["docker_settings"]["manager_url"] == "https://manager.example"
+        assert vm["docker_settings"]["manager_name"] == "Test manager"
 
 
 def test_corrupt_saved_policy_fails_closed(tmp_path):
@@ -235,3 +236,7 @@ async def test_fresh_positive_detection_overrides_old_negative_scan_for_schedule
 def test_docker_global_enable_flag_is_not_part_of_configuration():
     assert "docker_enabled" not in AppConfig.model_fields
     assert ScheduleConfig().check_docker is False
+
+
+def test_default_external_manager_is_provider_neutral():
+    assert DockerSettings(mode="external").manager_name == "External manager"

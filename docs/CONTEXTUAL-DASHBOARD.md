@@ -733,3 +733,16 @@ vertically instead of flowing into two narrow grid columns. Native and Dockhand 
 filters, confirmations and policy guards are unchanged.
 Verification: 66 offline UI tests pass, including distinct menu glyphs. Simulated browser checks
 at 320, 390 and 768 pixels show no page overflow; desktop remains a table. No homelab requests.
+
+### Link-only external managers
+
+Other external manager is explicitly link-only: the dashboard shows Managed externally, Not
+monitored and Not applicable, with the configured name and optional URL. No container glyph/count
+or old native findings contribute to its metrics or overview totals. A missing URL renders a neutral
+manager tag rather than a hidden settings action. Its container menu offers View management details,
+without checks or the machine-wide monitor toggle. Native container menus retain that toggle;
+Dockhand container menus omit it because the toggle does not control Dockhand. Machine/OS menus
+retain their independent monitoring control. Generic defaults, placeholders and mode-specific help
+no longer assume Dockhand; existing explicitly configured manager names remain intact.
+Verification: 68 offline UI tests and 37 Docker settings/provider backend tests pass. Simulated
+browser save confirmed the custom manager name/link and menu without image checks or deployments.

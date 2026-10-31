@@ -99,7 +99,7 @@ class DockerSettings(BaseModel):
     """Per-target Docker policy; OS update permissions are independent."""
 
     mode: Literal["managed", "monitor", "external", "disabled"] = "managed"
-    manager_name: str = Field("Dockhand", min_length=1, max_length=80)
+    manager_name: str = Field("External manager", min_length=1, max_length=80)
     manager_url: str | None = Field(None, max_length=2048)
 
     @field_validator("manager_name")

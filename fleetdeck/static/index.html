@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fleetdeck</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css?v=50">
+  <link rel="stylesheet" href="/static/style.css?v=51">
   <script src="/static/theme.js?v=11"></script>
 </head>
 <body class="dashboard-page">
@@ -120,10 +120,10 @@
           <option value="disabled">Disabled</option>
         </select>
       </label>
-      <p class="muted">Fleetdeck checks download Compose images. Dockhand checks registry metadata. Choosing a provider does not start a check or install updates.</p>
+      <p id="docker-mode-help" class="muted">Fleetdeck checks download Compose images. Dockhand checks registry metadata. Choosing a provider does not start a check or install updates.</p>
       <div id="docker-external-fields" hidden>
-        <label class="dlg-field">Manager name <input id="docker-manager-name" maxlength="80" placeholder="Dockhand"></label>
-        <label class="dlg-field">Manager URL (optional) <input id="docker-manager-url" type="url" maxlength="2048" placeholder="https://dockhand.example"></label>
+        <label class="dlg-field">Manager name <input id="docker-manager-name" maxlength="80" placeholder="External manager"></label>
+        <label class="dlg-field">Manager URL (optional) <input id="docker-manager-url" type="url" maxlength="2048" placeholder="https://manager.example"></label>
       </div>
       <div id="dockhand-connection-fields" hidden>
         <p id="dockhand-shared-note" class="muted"></p>
@@ -221,8 +221,8 @@
 
   <script src="/static/format.js?v=1"></script>
   <script src="/static/tools.js?v=1"></script>
-  <script src="/static/containers.js?v=8"></script>
-  <script src="/static/app.js?v=49"></script>
+  <script src="/static/containers.js?v=9"></script>
+  <script src="/static/app.js?v=50"></script>
   <script src="/static/console.js?v=2"></script>
 </body>
 </html>
