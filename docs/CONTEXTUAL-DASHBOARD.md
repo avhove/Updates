@@ -856,3 +856,13 @@ Pre-deployment polls are versioned so an in-flight old report cannot restore inv
 The Dockhand container action is now labelled Update within its Containers row/panel. Its accessible
 name and confirmation retain the full container scope. The Actions column uses the ordinary 144px
 budget again, rather than expanding to accommodate Update containers.
+
+
+Phone headers (up to 520px) now show only Check all and More beside the brand. Theme and authenticated
+Sign out move into More with visible labels; the same controls return to the desktop toolbar on
+resize. Anonymous sessions never gain Sign out, and other pages retain their existing toolbar.
+The menu fits the viewport and scrolls vertically when needed. Shared theme/session behavior has
+its own offline tests, including resize, theme persistence behavior and escaped username labels.
+Enabled container deployment buttons (Dockhand and native stacks) and the Dockhand update
+confirmation use the same blue token as container-update status. OS actions remain purple;
+disabled deployments retain their neutral appearance. All 74 UI tests pass.

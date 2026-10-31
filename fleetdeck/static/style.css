@@ -1232,3 +1232,29 @@ a.brand { color: var(--text); text-decoration: none; }
 #dockhand-update-dialog .dockhand-update-choice { flex-direction:row; }
 #dockhand-update-dialog .dockhand-update-choice input { width:18px; height:18px; }
 .dashboard-page .scope-actions > button.dockhand-update-action.small:not(.more-actions) { width:auto; }
+
+/* Secondary header actions live in More on phones; the same controls return on desktop. */
+.dashboard-menu-session:empty { display:none; }
+.dashboard-menu-session:not(:empty) { border-top:1px solid var(--border); margin-top:6px; padding-top:6px; }
+@media(max-width:520px) {
+  .dashboard-page .dashboard-menu-session .icon { width:100%; justify-content:flex-start; min-height:44px; }
+  .dashboard-page .dashboard-menu-items { max-height:calc(100dvh - 80px); overflow-y:auto; }
+}
+.dashboard-menu-session > button.dashboard-menu-item { display:grid; grid-template-columns:18px minmax(0,1fr); gap:10px; align-items:center; padding:8px 10px; border:0; border-radius:6px; box-shadow:none; background:transparent; color:var(--text); text-align:left; white-space:normal; font-size:13px; line-height:20px; font-weight:500; }
+.dashboard-menu-session > button.dashboard-menu-item:hover { background:var(--chip); }
+@media(max-width:520px) {
+  .dashboard-page > header > .toolbar { display:flex; width:auto; flex:0 0 auto; margin-left:auto; gap:6px; }
+  .dashboard-page > header > .toolbar .dashboard-menu-items { width:min(300px,calc(100vw - 24px)); max-width:calc(100vw - 24px); }
+}
+/* Container deployments share the blue container-availability colour for either provider. */
+.dashboard-page button.primary.dockhand-update-action:not(:disabled),
+.dashboard-page button.primary[data-stack]:not(:disabled),
+.dashboard-page #dockhand-update-submit.primary:not(:disabled) { background:var(--container-tone); border-color:var(--container-tone); color:var(--accent-text); }
+.dashboard-page button.primary.dockhand-update-action:hover:not(:disabled),
+.dashboard-page button.primary[data-stack]:hover:not(:disabled),
+.dashboard-page #dockhand-update-submit.primary:hover:not(:disabled) { background:color-mix(in srgb,var(--container-tone) 90%,var(--panel)); }
+@media(max-width:520px) {
+  .dashboard-page > header > .toolbar > #check-all { width:auto; min-width:0; flex:none; padding-inline:10px; }
+}
+
+.dashboard-menu-session button span { min-width:0; overflow-wrap:anywhere; }
