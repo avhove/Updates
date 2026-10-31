@@ -786,3 +786,8 @@ OS metadata, so they cannot squeeze a short machine name onto multiple lines. Li
 rows omit the redundant Not monitored / Not applicable values and compact their empty time row.
 Their status and provider tooltips now say Monitored externally, using the configured manager name.
 All 70 offline UI tests pass, including badge placement and neutral external-manager rows.
+
+Mobile metadata now starts at the card content edge rather than retaining the old 18px name indent.
+Bottom padding is 10px; More occupies a 32px layout box while its transparent hit target remains
+44px. Menu-only metric margins are smaller, removing unnecessary bottom space without changing
+primary action sizing. Simulated 320px and 390px checks show no horizontal overflow.

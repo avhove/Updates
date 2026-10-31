@@ -1204,3 +1204,14 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .mc-card .mc-containers:has(> .mc-container-check:empty) > .mc-scope-title { grid-row:1; }
   .dashboard-page .mc-card .mc-containers:has(> .mc-container-check:empty) > .scope-actions { grid-row:2; }
 }
+
+/* Flush-left metadata and compact card bottoms, with full-size menu tap targets. */
+@media(max-width:1119px) {
+  .dashboard-page .mc-card .machine-meta { margin-left:0; }
+  .dashboard-page .mc-card { padding-bottom:10px; }
+  .dashboard-page .mc-card .mc-footer button.more-actions,
+  .dashboard-page .mc-card .mc-utility-row button.more-actions,
+  .dashboard-page .mc-card .scope-actions button.more-actions { height:32px; min-height:32px; }
+  .dashboard-page .mc-card .more-actions::before { content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
+  .dashboard-page .mc-card:has(.mc-utility-row) .mc-os-scope .mc-counts.os-metrics { margin-block:2px; }
+}
