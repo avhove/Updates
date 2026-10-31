@@ -891,3 +891,7 @@ menu action stays container-only, retaining download confirmation when native ho
 Dockhand details headers contain the check action and manager link, without a duplicate
 bulk Update button. Bulk selection remains available on the host’s container row; eligible
 containers retain their individual Update action in the details table.
+
+The host-level Dockhand Update action is hidden when no container has an eligible image
+update, matching the individual Update actions. Eligible updates temporarily blocked by
+permissions, active jobs or unavailable reports still show a disabled action.

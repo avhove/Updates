@@ -1677,6 +1677,10 @@ test("Dockhand installs are opt-in, select running containers by default and req
     assert.equal(req.containers[0].state, 'running');
     assert.equal(doc.querySelector('#dockhand-update-dialog').open, false);
     assert.equal(ui.state.logJob, 'dockhand-update-job');
+    target.dockhand.containers = rows.map(row => row.status === 'update' ? {...row, status:'current', image_update:false} : row);
+    ui.render();
+    assert.equal(doc.querySelector('[data-dockhand-update]'),null,'no host or detail Update buttons when nothing is eligible');
+    assert.match(doc.querySelector(mobile ? '.mc-containers .container-status-hit' : '.container-row .container-status-hit').textContent,/Up to date/);
     const disabled = await dashboard({ targets: [machine('no-install', { view: { dockhand: { containers: rows } } })], mobile });
     assert.equal(disabled.document.querySelector('[data-dockhand-update]'), null);
   }
