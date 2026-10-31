@@ -767,3 +767,16 @@ from 375px upward; narrower screens keep a stacked arrangement. Empty intervenin
 excess count margins were removed. Actual Update/Boot up/Reboot buttons keep their own bottom row.
 Simulated browser checks at 320, 390 and 768px show no page overflow. The Simulated Dockhand tag
 is a demo-only replacement for a live manager link, not a production provider status.
+
+### Touch-layout status alignment
+
+Mobile status buttons no longer use a 44px minimum layout height: that rule centred the visible
+status lower than the machine name and displaced its checked time on touch devices. A transparent
+44px pseudo-element keeps the tap target while text uses a 20px line box aligned to the name.
+Machine names can shrink/wrap beside the monitor badge instead of wrapping the badge onto its own
+row. Mobile status hover fills are removed to avoid persistent touch-hover highlighting; keyboard
+focus remains visible. Touch active styling does not translate the status text.
+Verification: all 69 offline UI tests pass. Local browser review with coarse-pointer CSS rules
+explicitly enabled measured zero top offset between name/status and a retained 44px hit area.
+320px layout has no horizontal page overflow. This is a simulated touch-layout check, not a test
+on a physical iPhone.

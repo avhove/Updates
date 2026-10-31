@@ -1178,3 +1178,19 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .mc-card .mc-containers { grid-template-columns:minmax(0,1.2fr) minmax(0,1fr); }
   .dashboard-page .mc-card .mc-containers > .container-indicators { column-gap:8px; }
 }
+
+/* Keep touch hit areas from moving the visible status text out of alignment. */
+@media(max-width:1119px) {
+  .dashboard-page .mc-card .machine-main { flex-wrap:nowrap; line-height:20px; }
+  .dashboard-page .mc-card .machine-main .state, .dashboard-page .mc-card .monitor-policy { flex:none; }
+  .dashboard-page .mc-card .machine-name { flex:1 1 auto; min-width:0; overflow-wrap:anywhere; }
+  .dashboard-page .mc-card .mc-status-group { align-self:start; }
+  .dashboard-page .mc-card .os-status-hit, .dashboard-page .mc-card .container-status-hit { position:relative; display:block; min-height:0; padding:0; line-height:20px; }
+  .dashboard-page .mc-card .status-inline { min-height:0; line-height:20px; }
+  .dashboard-page .mc-card .mc-check-time { line-height:18px; }
+  .dashboard-page .mc-card .os-status-hit:hover, .dashboard-page .mc-card .container-status-hit:hover { background:transparent; }
+}
+@media(max-width:1119px) and (pointer:coarse) {
+  .dashboard-page .mc-card .os-status-hit::before, .dashboard-page .mc-card .container-status-hit::before { content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
+  .dashboard-page .mc-card .os-status-hit:active, .dashboard-page .mc-card .container-status-hit:active { transform:none; }
+}
