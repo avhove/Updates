@@ -1807,6 +1807,8 @@ test("native Compose scope alone creates no coverage icon or empty tab", async (
       stacks:[{name:'app',state:'running',update_available:false,services:[service]}]}}});
     const ui=await dashboard({mobile,targets:[target]});
     const coverage=()=>ui.document.querySelector('[data-open-docker="native"][data-container-filter="coverage"]');
+    assert.equal(ui.document.querySelector('.scope-actions [data-open-docker]'),null);
+    assert.doesNotMatch(ui.document.querySelector('#groups').textContent,/View stacks/);
     assert.equal(coverage(),null);
     assert.equal(ui.document.querySelector('.container-indicator[data-container-filter="updates"]'),null);
     ui.click('[data-open-docker="native"][data-container-filter="all"]');

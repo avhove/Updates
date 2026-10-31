@@ -104,7 +104,7 @@ function containerRowAction(v) {
   if (policy.mode === "disabled") return "";
   if (v.dockhand && v.dockhand_updates_allowed) return dockhandUpdateButton(v);
   if (v.dockhand || policy.mode === "external") return managerLink(v, policy.manager_name || "Manager");
-  return `<button class="small" data-open-docker="${esc(v.target.id)}" data-container-filter="all" data-focus-key="container-details:${esc(v.target.id)}" aria-expanded="${state.containerExpanded.has(v.target.id)}">View stacks</button>`;
+  return "";
 }
 
 function containerScope(v) {

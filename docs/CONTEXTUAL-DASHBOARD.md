@@ -12,8 +12,8 @@ Machine identity, selection and optional backup context span both rows in All. T
 second line contains only its OS; type and policy badges stay beside its name. A single header
 reads Machine, Scope, Status, Updates, Checked, Backup (when available), Actions. **Machine information** is available in each per-machine **…** menu. A container row has its own manager symbol, status,
 independent update/review/coverage/failure metrics, check ages and provider-specific action.
-The **Update** button keeps its name and appears exclusively on the OS row. Native Docker uses
-**View stacks**, with the existing confirmed **Update stack** action inside details; external
+The **Update** button keeps its name and appears exclusively on the OS row. Native Docker details open through the status or update counters,
+with the existing confirmed **Update stack** action inside details; external
 management links to the configured manager. Dockhand can optionally expose confirmed Update containers actions, as described below. Neither tab selection nor expanding details starts a check.
 
 Both providers share the same compact details panel and flat table sorted by Stack then
@@ -903,3 +903,7 @@ while its filter is open, details return to All instead of leaving an empty, uns
 Confirmed zero container image-update counts do not render an update icon or zero badge.
 Positive counts and unavailable-count indicators remain visible; empty metric slots preserve
 column alignment. Up-to-date status and the clickable status/details action remain available.
+
+The redundant native **View stacks** button is removed from desktop rows and mobile cards.
+Status and metric buttons, plus the existing View container details menu item, retain access
+to container details; provider update actions and the More menu are unchanged.
