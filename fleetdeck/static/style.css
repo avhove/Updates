@@ -1215,3 +1215,9 @@ a.brand { color: var(--text); text-decoration: none; }
   .dashboard-page .mc-card .more-actions::before { content:""; position:absolute; left:0; right:0; top:50%; height:44px; transform:translateY(-50%); }
   .dashboard-page .mc-card:has(.mc-utility-row) .mc-os-scope .mc-counts.os-metrics { margin-block:2px; }
 }
+
+/* Link-only providers need room for their description, not an empty metric column. */
+@media(max-width:1119px) {
+  .dashboard-page .mc-card .mc-containers:has(> .mc-container-check:empty) { grid-template-columns:auto minmax(0,1fr); }
+  .dashboard-page .mc-card .mc-containers:has(> .mc-container-check:empty) > .container-status-hit { align-self:start; }
+}

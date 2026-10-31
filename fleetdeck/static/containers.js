@@ -48,7 +48,7 @@ function containerStatus(v) {
   const policy = dockerSettings(v), s = containerSummary(v);
   let symbol = "help", label = "Not checked", tone = "muted";
   if (policy.mode === "disabled") label = "Disabled";
-  else if (!v.dockhand && !dockerEnabled(v)) { symbol = "external"; label = "Monitored externally"; }
+  else if (!v.dockhand && !dockerEnabled(v)) { symbol = null; label = "Monitored externally"; }
   else if (s.checking) return '<span class="status-inline muted"><span class="spin"></span>Checking containers…</span>';
   else if (s.error || s.checkError) { symbol = "alert"; label = "Check unavailable"; tone = "bad"; }
   else if (s.stale && s.rows.length) { symbol = "clock"; label = "Last-known results"; }
@@ -58,7 +58,7 @@ function containerStatus(v) {
   else if (s.reviews) { symbol = "tag"; label = "Review needed"; tone = "container-review-tone"; }
   else if (s.coverage) { symbol = "info"; label = "Coverage exceptions"; }
   else if (s.current) { symbol = "check"; label = "Up to date"; tone = "ok"; }
-  return `<span class="status-inline ${tone}">${icon(symbol)}${label}</span>`;
+  return `<span class="status-inline ${tone}">${symbol ? icon(symbol) : ""}<span>${label}</span></span>`;
 }
 
 function containerCheckTime(v, withLabel = false) {

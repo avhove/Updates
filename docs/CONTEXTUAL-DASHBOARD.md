@@ -791,3 +791,8 @@ Mobile metadata now starts at the card content edge rather than retaining the ol
 Bottom padding is 10px; More occupies a 32px layout box while its transparent hit target remains
 44px. Menu-only metric margins are smaller, removing unnecessary bottom space without changing
 primary action sizing. Simulated 320px and 390px checks show no horizontal overflow.
+
+Link-only mobile status now takes the remaining width after the Containers caption rather than
+half the section. Its duplicate external-arrow icon is omitted (the provider caption keeps it),
+and container status text is wrapped in a text element so it stays together beside its icon.
+Simulated 320px and 390px checks keep Monitored externally on one line; 70 UI tests pass.

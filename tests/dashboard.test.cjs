@@ -1584,6 +1584,9 @@ test("link-only managers have no monitoring controls or cached native update cou
     const doc = ui.document;
     assert.doesNotMatch(doc.querySelector('[data-machine-row="other-manager"]').parentNode.textContent, /Not monitored|Not applicable/);
     assert.equal(doc.querySelectorAll('.container-metric-hit').length, 0);
+    const externalStatus = doc.querySelector('.container-status-hit');
+    assert.match(externalStatus.textContent, /Monitored externally/);
+    assert.equal(externalStatus.querySelector('svg'), null);
     const managerLink = doc.querySelector('a.docker-status-link');
     assert.equal(managerLink.getAttribute('href'), 'https://manager.example');
     assert.match(managerLink.textContent, /Test manager/);
