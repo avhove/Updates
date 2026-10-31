@@ -17,7 +17,7 @@ function containerView(v) {
       scheduledAt: dh.scheduled_check_at, scheduledStatus: dh.scheduled_status,
       scheduledErrors: dh.scheduled_errors, scheduledChecked: dh.scheduled_checked };
   }
-  if (!dockerEnabled(v)) return { provider: dockerSettings(v).mode, rows: [], scopeGap: false, checking: false, stale: false };
+  if (!dockerEnabled(v)) return { provider: dockerSettings(v).mode, rows: [], checking: false, stale: false };
   const r = v.stacks, rows = [];
   for (const stack of r?.stacks || []) {
     for (const service of stack.services || []) {
@@ -32,7 +32,7 @@ function containerView(v) {
     if (stack.error && !stack.services?.length) rows.push({ name: stack.name, stack: stack.name, image: "",
       status: "failed", state: "Stack check unavailable", check_issue: "stack", checked_at: r.checked_at, source: "fleetdeck_native", nativeStack: stack });
   }
-  return { provider: "native", rows, scopeGap: true, checking: ["stacks", "stack-update"].includes(v.active_job?.action),
+  return { provider: "native", rows, checking: ["stacks", "stack-update"].includes(v.active_job?.action),
     stale: !!r?.error || (!v.target.updatable && !!r), error: r?.error, checkedAt: r?.checked_at, syncedAt: r?.checked_at };
 }
 
@@ -125,8 +125,8 @@ function dockerCell(v, withManager = true) {
   const label = s.usable ? `${s.updates} ${plural(s.updates, "container with an image update", "containers with image updates")}${s.stale ? " · last-known results" : ""}` : "Container update count unavailable";
   let body = badge("updates", "container", s.value, label, `container${s.stale ? " last-known" : ""}${s.unknown ? " unknown" : ""}`);
   body += s.reviews ? badge("review", "tag", s.reviews, `${s.reviews} containers with version / pinned-digest advisories or held updates`, "container-review") : empty("review");
-  body += s.coverage || s.scopeGap ? badge("coverage", "coverage", s.coverage || null,
-    s.scopeGap ? "Compose-only coverage: standalone containers and newer-version tags are outside Fleetdeck native checks" : `${s.coverage} coverage ${plural(s.coverage, "exception", "exceptions")}: local, excluded, new or unmatched containers`, "container-coverage") : empty("coverage");
+  body += s.coverage ? badge("coverage", "coverage", s.coverage,
+    `${s.coverage} coverage ${plural(s.coverage, "exception", "exceptions")}: local, excluded, new or unmatched containers`, "container-coverage") : empty("coverage");
   body += s.failures ? badge("failures", "alert", s.failures, `${s.failures} ${plural(s.failures, "latest container or stack check failed", "latest container or stack checks failed")}; known updates are retained`, "container-failure") : empty("failures");
   return `<span class="container-indicators">${body}${withManager ? `<span class="container-manager-symbol" role="img" aria-label="${esc(manager)}" title="${esc(manager)}">${icon(s.provider === "dockhand" ? "external" : "server")}</span>` : ""}</span>`;
 }
@@ -181,14 +181,15 @@ function containerName(row) {
 
 function containerPanel(v) {
   const s = containerSummary(v), id = esc(v.target.id), dh = v.dockhand, native = s.provider === "native";
-  const filter = state.containerFilters?.[v.target.id] || "all", compare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+  const requestedFilter = state.containerFilters?.[v.target.id] || "all";
+  const filter = requestedFilter === "coverage" && !s.coverage ? "all" : requestedFilter, compare = (a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
   const items = [...s.rows].sort((a, b) => compare(a.stack || "Standalone", b.stack || "Standalone") || compare(a.name, b.name) || compare(a.image, b.image));
   const shown = items.filter(row => filter === "all" || containerFacts(row)[({ updates: "update", current: "current", review: "review", coverage: "coverage", failures: "failure" })[filter]]);
   const button = native ? `<button class="small" data-act="stacks" data-id="${id}" ${!canUpgrade(v.target) || v.active_job ? "disabled" : ""} title="Download newer Compose images to compare; confirmation is required">${icon("refresh")}Fetch image updates</button>`
     : `<button class="small" data-dockhand-check="${id}" ${!state.settings.dockhand_checks_allowed || s.checking ? "disabled" : ""} title="${state.settings.dockhand_checks_allowed ? "Request a fresh registry digest check; no image layers or restarts" : "Enable dockhand.allow_checks in Settings to allow fresh checks"}">${icon("refresh")}${s.checking ? "Checking…" : "Check in Dockhand"}</button>`;
   const mode = native ? `Fleetdeck native · ${dockerSettings(v).mode === "monitor" || v.monitor_only ? "monitor only" : "Compose"}` : "Dockhand";
 
-  const tabs = [["all", "All", s.rows.length], ...(s.updates ? [["updates", "Image updates", s.updates]] : []), ...(s.current ? [["current", "Up to date", s.current]] : []), ...(s.reviews ? [["review", "Review", s.reviews]] : []), ...(s.coverage || s.scopeGap ? [["coverage", "Coverage", s.coverage || null]] : []), ...(s.failures ? [["failures", "Failures", s.failures]] : [])];
+  const tabs = [["all", "All", s.rows.length], ...(s.updates ? [["updates", "Image updates", s.updates]] : []), ...(s.current ? [["current", "Up to date", s.current]] : []), ...(s.reviews ? [["review", "Review", s.reviews]] : []), ...(s.coverage ? [["coverage", "Coverage", s.coverage]] : []), ...(s.failures ? [["failures", "Failures", s.failures]] : [])];
   const filters = `<div class="container-filters" role="group" aria-label="Filter container results">${tabs.map(([value, text, count]) => `<button class="small ghost" data-container-view-filter="${value}" data-id="${id}" data-focus-key="container-filter:${id}:${value}" aria-pressed="${filter === value}">${text}${count === null ? "" : ` <span>${count}</span>`}</button>`).join("")}</div>`;
   const actions = (native && dockerSettings(v).mode === "managed") || (!native && v.dockhand_updates_allowed);
   const seen = new Set();

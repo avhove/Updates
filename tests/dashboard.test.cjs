@@ -1799,3 +1799,29 @@ test("Check all skips the popup without eligible native image downloads and resp
     assert.equal(ui.calls.filter(c=>c.path==='/api/dockhand/check').length,allowed?1:0);
   }
 });
+
+test("native Compose scope alone creates no coverage icon or empty tab", async () => {
+  for (const mobile of [false,true]) {
+    const service={name:'web',image:'example/web:1',status:'running',outdated:false};
+    const target=machine('native',{check:{docker_installed:true},view:{stacks:{docker:'yes',compose:'v2',checked_at:now,
+      stacks:[{name:'app',state:'running',update_available:false,services:[service]}]}}});
+    const ui=await dashboard({mobile,targets:[target]});
+    const coverage=()=>ui.document.querySelector('[data-open-docker="native"][data-container-filter="coverage"]');
+    assert.equal(coverage(),null);
+    ui.click('[data-open-docker="native"][data-container-filter="all"]');
+    const panel=()=>ui.document.querySelector(mobile?'.mc-container-panel':'.container-detail');
+    assert.equal(panel().querySelector('[data-container-view-filter="coverage"]'),null);
+    assert.match(panel().textContent,/Compose stacks only/);
+    service.status='exited'; ui.render();
+    assert.equal(coverage().textContent,'1');
+    ui.click('[data-open-docker="native"][data-container-filter="coverage"]');
+    assert.equal(panel().querySelector('[data-container-view-filter="coverage"]').textContent,'Coverage 1');
+    assert.match(panel().querySelector('.container-results-table').textContent,/Stopped service · not checked/);
+    service.status='running'; ui.render();
+    assert.equal(coverage(),null);
+    assert.equal(panel().querySelector('[data-container-view-filter="coverage"]'),null);
+    assert.equal(panel().querySelector('[data-container-view-filter="all"]').getAttribute('aria-pressed'),'true');
+    assert.match(panel().querySelector('.container-results-table').textContent,/web.*Up to date/);
+    assert.equal(ui.calls.some(c=>c.method==='POST'),false);
+  }
+});

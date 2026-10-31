@@ -895,3 +895,7 @@ containers retain their individual Update action in the details table.
 The host-level Dockhand Update action is hidden when no container has an eligible image
 update, matching the individual Update actions. Eligible updates temporarily blocked by
 permissions, active jobs or unavailable reports still show a disabled action.
+
+Native Compose-only scope is explained in details, without manufacturing a coverage exception.
+Coverage icons and tabs require actual per-container exceptions. If the final exception clears
+while its filter is open, details return to All instead of leaving an empty, unselectable view.
