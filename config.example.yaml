@@ -53,6 +53,7 @@ community_scripts_update: true
 #   environments:
 #     - target_id: ssh:docker-host
 #       environment_id: 1
+#       allow_updates: false  # opt in to confirmed manual installations through Dockhand
 # Such a container then also gets the regular OS upgrade right after, even if the app's own update failed.
 # Encrypt the host config archives of the "Back up" button to this age public key (age1...). Only
 # the matching private key, which you keep in your password manager, opens them; the dashboard never

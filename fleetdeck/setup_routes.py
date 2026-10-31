@@ -341,6 +341,7 @@ def add_setup_routes(
                 "token_configured": bool(dh and dh.token),
                 "poll_seconds": dh.poll_seconds if dh else 300,
                 "allow_checks": bool(dh and dh.allow_checks),
+                "allow_updates": bool(mapping and mapping.allow_updates),
                 "environment_id": mapping.environment_id if mapping else None,
                 "shared_hosts": len(dh.environments) if dh else 0,
                 "can_restart": restart is not None,

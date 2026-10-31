@@ -354,10 +354,11 @@ class ConsoleConfig(BaseModel):
 class DockhandEnvironment(BaseModel):
     target_id: str = Field(min_length=1, max_length=512)
     environment_id: int = Field(ge=1)
+    allow_updates: bool = False
 
 
 class DockhandConfig(BaseModel):
-    """Opt-in cached status only. Never pulls images or changes containers."""
+    """Cached reports, optional checks, and explicitly allowed per-machine deployments."""
 
     url: str = Field(max_length=2048)
     token: str = Field(min_length=1, max_length=4096, repr=False)

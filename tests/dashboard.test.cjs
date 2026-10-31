@@ -69,6 +69,11 @@ async function dashboard({ containers = true, dockhandChecks = false, scheduledC
       else if (path === "/api/docker-settings") body = { docker_settings: JSON.parse(options.body) };
       else if (path === "/api/actions") body = { jobs: [], rejected: {} };
       else if (path === "/api/dockhand/check") body = { started: true };
+      else if (path.startsWith('/api/dockhand/update-options')) {
+        const id = decodeURIComponent(path.split('target_id=')[1]);
+        body = { containers: data.targets.find(v => v.target.id === id).dockhand.containers };
+      }
+      else if (path === '/api/dockhand/update') body = { job: { id: 'dockhand-update-job', action: 'dockhand-update' } };
       else if (path === "/api/monitor-only") body = { monitor_only: [] };
       else if (path === "/api/update-command") body = { update_command: JSON.parse(options.body).command };
       else if (path === "/api/session") body = { login: false };
@@ -1225,7 +1230,7 @@ test("container help shows actual settings and the effective outcome for schedul
     const panel = ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
     const box = panel.querySelector('.container-check-settings');
     const values = Object.fromEntries([...box.querySelectorAll('dl > div')].map(row => [row.querySelector('dt').textContent, row.querySelector('dd').textContent]));
-    assert.deepEqual(values, { 'Container provider': 'Dockhand', 'Fleetdeck scheduled container checks': item.scheduled ? 'On' : 'Off',
+    assert.deepEqual(values, { 'Container provider': 'Dockhand', 'Install container updates': 'Disabled', 'Fleetdeck scheduled container checks': item.scheduled ? 'On' : 'Off',
       'Manual container checks': item.allowed ? 'Enabled' : 'Disabled', 'Fleetdeck check interval': item.interval ? 'Every 6 h' : 'Scheduling off', 'Read saved Dockhand reports': 'Every 5 min' });
     assert.match(box.querySelector('.container-check-outcome').textContent, item.outcome);
     assert.match(box.textContent, /Dockhand’s own schedule is unchanged/);
@@ -1641,4 +1646,44 @@ test("mobile name width is independent of dashboard and monitor badges", async (
   assert.equal(card.querySelector('.machine-main .chip'), null);
   assert.match(card.querySelector('.machine-meta').textContent, /VM.*dashboard/);
   assert.ok(card.querySelector('.machine-meta .monitor-policy'));
+});
+
+test("Dockhand installs are opt-in, select running containers by default and require confirmation", async () => {
+  for (const mobile of [false, true]) {
+    const rows = [
+      { container_id: 'running', name: '<web>', image: 'nginx:latest', state: 'running', status: 'update', image_update: true, checked_at: now },
+      { container_id: 'stopped', name: 'stopped', image: 'tool:latest', state: 'exited', status: 'update', image_update: true, checked_at: now },
+      { container_id: 'local', name: 'local', image: 'local:v1', state: 'running', status: 'local', excluded_reason: 'Local image' },
+    ];
+    const target = machine('dh-install', { view: { dockhand_updates_allowed: true, dockhand: { stale: false, containers: rows } } });
+    const ui = await dashboard({ targets: [target], mobile });
+    ui.click('[data-dockhand-update="dh-install"]'); await flush();
+    const doc = ui.document;
+    assert.equal(doc.querySelector('#dockhand-update-dialog').open, true);
+    assert.equal(doc.querySelector('#dockhand-update-items web'), null);
+    assert.match(doc.querySelector('#dockhand-update-items').textContent, /Stopped · stays stopped/);
+    assert.equal(doc.querySelectorAll('#dockhand-update-items input[checked]').length, 1);
+    assert.equal(ui.calls.some(c => c.path === '/api/dockhand/update'), false);
+    await doc.querySelector('#dockhand-update-form').onsubmit({ preventDefault() {} });
+    const req = JSON.parse(ui.calls.find(c => c.path === '/api/dockhand/update').body);
+    assert.equal(req.confirmed, true);
+    assert.deepEqual(req.containers.map(c => c.container_id), ['running']);
+    assert.equal(req.containers[0].state, 'running');
+    assert.equal(doc.querySelector('#dockhand-update-dialog').open, false);
+    assert.equal(ui.state.logJob, 'dockhand-update-job');
+    const disabled = await dashboard({ targets: [machine('no-install', { view: { dockhand: { containers: rows } } })], mobile });
+    assert.equal(disabled.document.querySelector('[data-dockhand-update]'), null);
+  }
+});
+
+test("Dockhand install permission is saved per mapping and starts no update", async () => {
+  const ui = await dashboard({ targets: [machine('install-setting', { view: { dockhand: { containers: [] } } })] });
+  ui.click('[data-machine-menu="install-setting"]'); ui.click('[data-docker-settings="install-setting"]'); await flush();
+  const doc = ui.document;
+  assert.equal(doc.querySelector('#dockhand-allow-updates').checked, false);
+  doc.querySelector('#dockhand-allow-updates').checked = true;
+  await doc.querySelector('#docker-settings-form').onsubmit({ preventDefault() {} });
+  const req = JSON.parse(ui.calls.find(c => c.path === '/api/setup/docker-management' && c.method === 'PUT').body);
+  assert.equal(req.allow_updates, true);
+  assert.equal(ui.calls.some(c => c.path === '/api/dockhand/update'), false);
 });

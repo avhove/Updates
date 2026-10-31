@@ -180,7 +180,9 @@ class StacksResult(BaseModel):
     error: str | None = None
 
 
-JobAction = Literal["start", "check", "upgrade", "reboot", "rollback", "backup", "stacks", "stack-update"]
+JobAction = Literal[
+    "start", "check", "upgrade", "reboot", "rollback", "backup", "stacks", "stack-update", "dockhand-update"
+]
 JobStatus = Literal["queued", "running", "succeeded", "failed"]
 
 

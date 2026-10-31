@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Fleetdeck</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/style.css?v=58">
+  <link rel="stylesheet" href="/static/style.css?v=59">
   <script src="/static/theme.js?v=11"></script>
 </head>
 <body class="dashboard-page">
@@ -134,13 +134,27 @@
           <label class="dlg-field">Read saved reports every (seconds) <input id="dockhand-poll" type="number" min="60" max="86400" value="300"></label>
           <label class="dlg-field">Dockhand environment ID <input id="dockhand-environment" type="number" min="1" step="1" placeholder="1"></label>
         </div>
-        <label class="container-prune"><input id="dockhand-allow-checks" type="checkbox"> Allow Fleetdeck to request fresh checks</label>
+        <label class="container-prune"><input id="dockhand-allow-checks" type="checkbox"> Check for container updates</label>
+        <p class="muted">Fleetdeck can trigger Dockhand to check for newer images.</p>
+        <label class="container-prune"><input id="dockhand-allow-updates" type="checkbox"> Install container updates</label>
+        <p class="muted">Fleetdeck can trigger Dockhand to install updates on this machine. Affected containers may restart. Each update requires confirmation.</p>
         <p class="muted">This environment is linked to the selected machine automatically. Scheduled checks also require <code>schedule.check_docker: true</code>. Saving does not change Dockhand’s own schedule.</p>
       </div>
       <p id="docker-settings-status" class="muted" role="status"></p>
       <p id="docker-settings-error" class="bad" role="alert"></p>
       </div>
       <menu><button type="button" id="docker-settings-close">Close</button><button type="submit" id="docker-settings-save" class="primary">Save</button><button type="button" id="docker-settings-apply" hidden>Apply saved changes</button></menu>
+    </form>
+  </dialog>
+
+  <dialog id="dockhand-update-dialog" aria-labelledby="dockhand-update-title">
+    <form id="dockhand-update-form">
+      <h3 id="dockhand-update-title">Update containers</h3>
+      <p class="muted">Dockhand will install image updates for the selected containers. Running containers may restart. Stopped containers stay stopped and are unselected by default. Dockhand may also restart dependent containers. Select up to 100 containers. OS packages are separate.</p>
+      <div id="dockhand-update-items"></div>
+      <details id="dockhand-update-exclusions"><summary>Not included</summary><ul id="dockhand-update-excluded"></ul></details>
+      <p id="dockhand-update-error" class="bad" role="alert"></p>
+      <menu><button type="button" id="dockhand-update-close">Cancel</button><button type="submit" id="dockhand-update-submit" class="primary" disabled>Update containers</button></menu>
     </form>
   </dialog>
 
@@ -221,8 +235,8 @@
 
   <script src="/static/format.js?v=1"></script>
   <script src="/static/tools.js?v=1"></script>
-  <script src="/static/containers.js?v=11"></script>
-  <script src="/static/app.js?v=52"></script>
+  <script src="/static/containers.js?v=12"></script>
+  <script src="/static/app.js?v=53"></script>
   <script src="/static/console.js?v=2"></script>
 </body>
 </html>

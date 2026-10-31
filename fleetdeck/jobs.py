@@ -45,7 +45,7 @@ REBOOT_POLL = 5.0
 # the re-check after a reboot is retried this many times before it is reported as failed.
 RECHECK_TRIES = 6
 # What a guest can be doing that stops its host from being updated or rebooted.
-GUEST_ACTIONS_BLOCKING_HOST = ("start", "upgrade", "stack-update", "reboot", "rollback")
+GUEST_ACTIONS_BLOCKING_HOST = ("start", "upgrade", "stack-update", "dockhand-update", "reboot", "rollback")
 # What a monitor-only machine never runs: installing OS, app or Docker updates.
 UPDATES = ("upgrade", "stack-update")
 
@@ -332,6 +332,8 @@ class JobManager:
         prune: bool = False,
         security_only: bool = False,
     ) -> Job:
+        if action == "dockhand-update":
+            raise ValueError("Use the confirmed Dockhand update endpoint")
         target, executor = self.inventory.get(target_id)
         self._ensure_docker_action(target_id, action)
         if action == "start":
@@ -381,6 +383,46 @@ class JobManager:
         self._save_job(job)
         self._evict()
         self._start(job)
+        return job
+
+    def submit_dockhand_update(self, target_id: str, operation) -> Job:
+        """External deployment uses normal job history/locks but is NEVER replayed on restart."""
+        target, _ = self.inventory.get(target_id)
+        if self.active_job(target_id):
+            raise ValueError("Wait for this machine's current job to finish")
+        job = Job(
+            id=uuid.uuid4().hex[:12],
+            target_id=target_id,
+            target_name=target.name,
+            action="dockhand-update",
+            created_at=_now(),
+        )
+        self.jobs[job.id] = job
+        self._save_job(job)
+        self._evict()
+
+        async def run():
+            async with self._target_locks.setdefault(target_id, asyncio.Lock()), self.sem:
+                job.status, job.started_at = "running", _now()
+                self._save_job(job)
+                try:
+                    await operation(lambda stream, line: job.log.append(line))
+                    job.status = "succeeded"
+                except Exception:
+                    # Provider errors may contain secrets. Only fixed text goes into logs/history.
+                    job.status, job.error = (
+                        "failed",
+                        "Dockhand update not fully confirmed; inspect Dockhand before retrying",
+                    )
+                    job.log.append(f"!! {job.error}")
+                finally:
+                    if job.status in ("succeeded", "failed"):
+                        job.finished_at = _now()
+                        self._save_job(job)
+
+        task = asyncio.create_task(run(), name=job.id)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
         return job
 
     def _evict(self) -> None:
@@ -742,7 +784,11 @@ class JobManager:
         Its own Docker stacks are updating, or (for a host) a guest on it is updating, updating Docker,
         rebooting or rolling back. A guest is never held back by its host updating.
         """
-        busy = [j for j in self.jobs.values() if j.target_id == target.id and j.action == "stack-update"]
+        busy = [
+            j
+            for j in self.jobs.values()
+            if j.target_id == target.id and j.action in ("stack-update", "dockhand-update")
+        ]
         if target.kind == "host":
             busy += [j for j in self._guest_jobs(target) if j.action in GUEST_ACTIONS_BLOCKING_HOST]
         busy = [j for j in busy if j.status in ("queued", "running")]

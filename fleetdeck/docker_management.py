@@ -18,6 +18,7 @@ class DockerManagementRequest(BaseModel):
     token: str | None = Field(None, max_length=4096, repr=False)
     poll_seconds: int = Field(300, ge=60, le=86400)
     allow_checks: bool = False
+    allow_updates: bool = False
     environment_id: int | None = Field(None, ge=1)
     manager_name: str = Field("External manager", min_length=1, max_length=80)
     manager_url: str | None = Field(None, max_length=2048)
@@ -45,7 +46,10 @@ def update_dockhand_mapping(raw: dict, current: AppConfig, req: DockerManagement
         if new_token:
             dockhand["token"] = new_token
         dockhand.update(poll_seconds=req.poll_seconds, allow_checks=req.allow_checks)
-        mappings.append({"target_id": req.target_id, "environment_id": req.environment_id})
+        mapping = {"target_id": req.target_id, "environment_id": req.environment_id}
+        if req.allow_updates:
+            mapping["allow_updates"] = True
+        mappings.append(mapping)
         dockhand["environments"] = mappings
         data["dockhand"] = dockhand
     elif mappings:

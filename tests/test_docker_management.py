@@ -270,3 +270,24 @@ def test_shared_provider_change_and_apply_wait_for_active_dockhand_checks(manage
         response = client.put("/api/setup/docker-management", json=body(client, token=None))
         assert response.status_code == 409 and path.read_text() == before
         assert client.post("/api/setup/apply").status_code == 409
+
+
+def test_install_permission_is_default_off_and_applies_only_to_selected_mapping(management):
+    app, path = management(
+        {
+            "url": "https://dockhand.invalid",
+            "token": "test-secret",
+            "environments": [
+                {"target_id": "machine-a", "environment_id": 1},
+                {"target_id": "machine-b", "environment_id": 2},
+            ],
+        }
+    )
+    with TestClient(app) as client:
+        assert details(client)["allow_updates"] is False
+        request = body(client, token=None, allow_updates=True)
+        assert client.put("/api/setup/docker-management", json=request).status_code == 200
+        assert details(client)["allow_updates"] is True
+        assert details(client, "machine-b")["allow_updates"] is False
+        mappings = yaml.safe_load(path.read_text())["dockhand"]["environments"]
+        assert next(m for m in mappings if m["target_id"] == "machine-a")["allow_updates"] is True

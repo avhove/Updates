@@ -134,7 +134,7 @@ function matchesKpi(v, filter) {
 const selectable = (v) => canUpgrade(v.target) && !v.check?.error && actionablePackages(v.check).length > 0 && !v.hidden && !v.blocked && !v.active_job && !v.monitor_only;
 const MONITOR_TIP = "Monitor only: checked and reported; updates are installed elsewhere. Reboots, backups and snapshots remain available.";
 const canReboot = (t) => canUpgrade(t) && !t.no_reboot;
-const BUSY = { start: "starting", upgrade: "updating", check: "checking", reboot: "rebooting", rollback: "rolling back", backup: "backing up", stacks: "checking Docker", "stack-update": "updating Docker" };
+const BUSY = { start: "starting", upgrade: "updating", check: "checking", reboot: "rebooting", rollback: "rolling back", backup: "backing up", stacks: "checking Docker", "stack-update": "updating Docker", "dockhand-update": "updating containers" };
 
 function metricButton(v, kind, count) {
   if (!displayCheck(v)?.packages?.length) return "";
@@ -409,7 +409,7 @@ function render() {
     return `
     <div class="group">
       <div class="group-head"><span class="chip">${PLATFORM[g.platform] || g.platform}</span> ${esc(g.title)}</div>
-      <div class="group-scroll"><table class="machine-table${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
+      <div class="group-scroll"><table class="machine-table${g.rows.some(v => v.dockhand_updates_allowed) ? " has-dockhand-updates" : ""}${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
         <colgroup><col class="col-select"><col class="col-machine"><col class="col-scope"><col class="col-status"><col class="col-updates"><col class="col-checked">${withBackup ? '<col class="col-backup">' : ""}<col class="col-actions"></colgroup>
         ${machineTableHead(withBackup)}
         ${rows}
@@ -588,7 +588,7 @@ function dockerModeFields() {
   const external = mode === "external", dockhand = mode === "dockhand";
   $("#docker-mode-help").textContent = external
     ? "Link only: Fleetdeck does not read container status, check images or deploy containers. Use the configured manager for these actions. OS updates remain independent."
-    : dockhand ? "Fleetdeck reads saved Dockhand reports and can request fresh digest checks when allowed. Deploy containers in Dockhand. Choosing this provider does not start a check."
+    : dockhand ? "Fleetdeck reads saved Dockhand reports and can request fresh digest checks when allowed. Container updates run in Dockhand and require confirmation when enabled. Choosing this provider does not start a check."
     : mode === "disabled" ? "Fleetdeck will not check or deploy containers on this machine. OS updates remain independent."
     : `Fleetdeck checks download Compose images after confirmation.${mode === "monitor" ? " Stack deployments are disabled." : " Stack deployments require a separate confirmation."} Choosing this mode does not start a check.`;
   $("#docker-external-fields").hidden = !external;
@@ -636,6 +636,7 @@ async function openDockerSettings(id) {
     $("#dockhand-poll").value = data.poll_seconds;
     $("#dockhand-environment").value = data.environment_id || "";
     $("#dockhand-allow-checks").checked = data.allow_checks;
+    $("#dockhand-allow-updates").checked = data.allow_updates === true;
     $("#dockhand-token").placeholder = data.token_configured ? "Leave blank to keep the saved token" : "Enter a token";
     $("#dockhand-shared-note").textContent = data.shared_hosts
       ? `Connection options affect all ${data.shared_hosts} mapped ${plural(data.shared_hosts, "machine", "machines")}. The environment ID applies only to this machine.`
@@ -1087,7 +1088,7 @@ $("#docker-settings-form").onsubmit = async (e) => {
   try {
     if (configChange) {
       Object.assign(body, { revision: dlg.dataset.revision, url: $("#dockhand-url").value.trim(), token: $("#dockhand-token").value || null,
-        poll_seconds: Number($("#dockhand-poll").value), allow_checks: $("#dockhand-allow-checks").checked,
+        poll_seconds: Number($("#dockhand-poll").value), allow_checks: $("#dockhand-allow-checks").checked, allow_updates: $("#dockhand-allow-updates").checked,
         environment_id: mode === "dockhand" ? Number($("#dockhand-environment").value) : null });
       const result = await api("/api/setup/docker-management", { method: "PUT", body: JSON.stringify(body) });
       $("#dockhand-token").value = "";
@@ -1175,3 +1176,56 @@ async function tick() {
   }
 }
 tick();
+
+let dockhandUpdateOptions = [], dockhandUpdateRequest = 0;
+function selectedDockhandUpdates() {
+  const ids = new Set([...document.querySelectorAll('#dockhand-update-items input:checked')].map(e => e.value));
+  return dockhandUpdateOptions.filter(c => ids.has(c.container_id)).map(c => ({ container_id: c.container_id, name: c.name, image: c.image, state: c.state }));
+}
+function renderDockhandUpdateCount() {
+  const n = selectedDockhandUpdates().length;
+  $("#dockhand-update-submit").disabled = n === 0 || n > 100 || $("#dockhand-update-dialog").dataset.sending === "true";
+  $("#dockhand-update-close").disabled = $("#dockhand-update-dialog").dataset.sending === "true";
+  $("#dockhand-update-submit").textContent = `Update ${n} ${plural(n, "container", "containers")}`;
+}
+async function openDockhandUpdate(id, only = null) {
+  const v = state.targets.find(v => v.target.id === id);
+  if (!v?.dockhand_updates_allowed) return;
+  closeMachineMenu();
+  const dlg = $("#dockhand-update-dialog"), request = ++dockhandUpdateRequest;
+  dlg.dataset.targetId = id; dlg.dataset.sending = "false";
+  $("#dockhand-update-title").textContent = `Update containers · ${v.target.name}`;
+  $("#dockhand-update-items").textContent = "Loading current Dockhand reports…";
+  $("#dockhand-update-error").textContent = ""; $("#dockhand-update-exclusions").hidden = true;
+  dockhandUpdateOptions = []; renderDockhandUpdateCount();
+  if (!dlg.open) dlg.showModal();
+  try {
+    const data = await api(`/api/dockhand/update-options?target_id=${encodeURIComponent(id)}`);
+    if (!dlg.open || request !== dockhandUpdateRequest) return;
+    dockhandUpdateOptions = data.containers.filter(c => !c.excluded_reason);
+    $("#dockhand-update-items").innerHTML = dockhandUpdateOptions.map(c => `<label class="dockhand-update-choice"><input type="checkbox" value="${esc(c.container_id)}" ${only ? (c.container_id === only ? "checked" : "") : (c.state === "running" ? "checked" : "")}><span><strong>${esc(c.name)}</strong> <span class="muted">· ${esc(c.stack || "Standalone")}</span><small>${esc(c.image)}</small>${c.state !== "running" ? '<small>Stopped · stays stopped</small>' : ""}</span></label>`).join("") || '<p class="muted">No eligible image updates. Request a fresh check, or review exclusions below.</p>';
+    const excluded = data.containers.filter(c => c.excluded_reason);
+    $("#dockhand-update-exclusions").hidden = !excluded.length;
+    $("#dockhand-update-excluded").innerHTML = excluded.map(c => `<li><strong>${esc(c.name)}</strong> · ${esc(c.excluded_reason)}</li>`).join("");
+    renderDockhandUpdateCount();
+  } catch (error) { if (request === dockhandUpdateRequest) { $("#dockhand-update-items").textContent = ""; $("#dockhand-update-error").textContent = error.message; } }
+}
+$("#dockhand-update-items").addEventListener("change", renderDockhandUpdateCount);
+$("#dockhand-update-dialog").addEventListener("cancel", e => { if ($("#dockhand-update-dialog").dataset.sending === "true") e.preventDefault(); });
+$("#dockhand-update-close").onclick = () => $("#dockhand-update-dialog").close();
+$("#dockhand-update-form").onsubmit = async e => {
+  e.preventDefault();
+  const dlg = $("#dockhand-update-dialog"), containers = selectedDockhandUpdates();
+  if (!containers.length || dlg.dataset.sending === "true") return;
+  dlg.dataset.sending = "true"; renderDockhandUpdateCount();
+  $("#dockhand-update-error").textContent = "";
+  try {
+    const result = await api('/api/dockhand/update', { method: 'POST', body: JSON.stringify({target_id: dlg.dataset.targetId, containers, confirmed: true}) });
+    state.logJob = result.job.id; state.logLines = []; dlg.close(); schedule(200);
+  } catch (error) { $("#dockhand-update-error").textContent = error.message; }
+  finally { dlg.dataset.sending = "false"; renderDockhandUpdateCount(); }
+};
+document.addEventListener('click', e => {
+  const button = e.target.closest('[data-dockhand-update]');
+  if (button && !button.disabled) openDockhandUpdate(button.dataset.dockhandUpdate, button.dataset.containerId || null);
+});

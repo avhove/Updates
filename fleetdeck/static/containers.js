@@ -49,6 +49,7 @@ function containerStatus(v) {
   let symbol = "help", label = "Not checked", tone = "muted";
   if (policy.mode === "disabled") label = "Disabled";
   else if (!v.dockhand && !dockerEnabled(v)) { symbol = null; label = "Monitored externally"; }
+  else if (v.active_job?.action === "dockhand-update") return '<span class="status-inline muted"><span class="spin"></span>Updating containers…</span>';
   else if (s.checking) return '<span class="status-inline muted"><span class="spin"></span>Checking containers…</span>';
   else if (s.error || s.checkError) { symbol = "alert"; label = "Check unavailable"; tone = "bad"; }
   else if (s.stale && s.rows.length) { symbol = "clock"; label = "Last-known results"; }
@@ -81,9 +82,26 @@ function containerCheckTime(v, withLabel = false) {
   return `<span title="${esc(title)}">${withLabel ? "Checked " : ""}${esc(age)}${notes.length ? `<span class="cell-detail">${esc(notes.join(" · "))}</span>` : ""}</span>`;
 }
 
+function dockhandUpdateEligible(row) {
+  const age = Date.now() - Date.parse(row.checked_at);
+  return row.status === "update" && row.image_update === true && ["running", "stopped", "exited", "created"].includes(row.state) && !row.check_issue &&
+    !row.advisory && !row.newer_version && !row.pinned_digest && !row.deferred_hours && age >= 0 && age <= 86400000 &&
+    !/(^|[/_.-])(dockhand|fleetdeck|homelab-manager)(?=$|[:@/_.-])/i.test(`${row.name}/${row.image}`);
+}
+function dockhandUpdateButton(v, row = null) {
+  if (!v.dockhand || !v.dockhand_updates_allowed) return "";
+  const status = v.dockhand;
+  const eligible = row ? dockhandUpdateEligible(row) : status.containers?.some(dockhandUpdateEligible);
+  if (row && !eligible) return "";
+  const enabled = eligible && !status.stale && !status.error && !status.check_error && !status.checking && !v.active_job && !v.blocked && !v.monitor_only && canUpgrade(v.target);
+  const reason = enabled ? "Confirm selected container updates through Dockhand; containers may restart" : v.monitor_only ? MONITOR_TIP : v.blocked || (v.active_job ? "Wait for the current machine job" : "Request a fresh container check or review update exclusions");
+  return `<button class="small primary dockhand-update-action" data-dockhand-update="${esc(v.target.id)}" ${row ? `data-container-id="${esc(row.container_id)}"` : ""} ${enabled ? "" : "disabled"} title="${esc(reason)}">${icon("download")}${row ? "Update" : "Update containers"}</button>`;
+}
+
 function containerRowAction(v) {
   const policy = dockerSettings(v);
   if (policy.mode === "disabled") return "";
+  if (v.dockhand && v.dockhand_updates_allowed) return dockhandUpdateButton(v);
   if (v.dockhand || policy.mode === "external") return managerLink(v, policy.manager_name || "Manager");
   return `<button class="small" data-open-docker="${esc(v.target.id)}" data-container-filter="all" data-focus-key="container-details:${esc(v.target.id)}" aria-expanded="${state.containerExpanded.has(v.target.id)}">View stacks</button>`;
 }
@@ -143,10 +161,10 @@ function containerCheckGuidance(v, s) {
   if (!native) outcome += " Dockhand’s own schedule is unchanged.";
   outcome += allowed ? " Manual fresh checks are enabled." : " Manual fresh checks are disabled.";
   const poll = state.settings.dockhand_poll_seconds;
-  const settings = `<section class="container-check-settings" aria-label="Current container check settings"><strong>Current options</strong><dl><div><dt>Container provider</dt><dd>${native ? `Fleetdeck native Docker${policy.mode === "monitor" || v.monitor_only ? " · monitor only" : ""}` : "Dockhand"}</dd></div><div><dt>Manual container checks</dt><dd>${allowed ? "Enabled" : "Disabled"}</dd></div><div><dt>Fleetdeck scheduled container checks</dt><dd>${scheduled ? "On" : "Off"}</dd></div><div><dt>Fleetdeck check interval</dt><dd>${hasSchedule ? `Every ${esc(every(interval))}` : "Scheduling off"}</dd></div>${!native ? `<div><dt>Read saved Dockhand reports</dt><dd>${Number.isFinite(poll) ? `Every ${esc(every(poll))}` : "Not reported"}</dd></div>` : ""}</dl><p class="container-check-outcome">${esc(outcome)}</p><div class="container-option-actions"><button class="small" data-docker-settings="${esc(v.target.id)}">Docker management</button><a class="button small" href="/settings">Schedule settings</a></div></section>`;
+  const settings = `<section class="container-check-settings" aria-label="Current container check settings"><strong>Current options</strong><dl><div><dt>Container provider</dt><dd>${native ? `Fleetdeck native Docker${policy.mode === "monitor" || v.monitor_only ? " · monitor only" : ""}` : "Dockhand"}</dd></div>${!native ? `<div><dt>Install container updates</dt><dd>${v.dockhand_updates_allowed ? "Enabled · confirmation required" : "Disabled"}</dd></div>` : ""}<div><dt>Manual container checks</dt><dd>${allowed ? "Enabled" : "Disabled"}</dd></div><div><dt>Fleetdeck scheduled container checks</dt><dd>${scheduled ? "On" : "Off"}</dd></div><div><dt>Fleetdeck check interval</dt><dd>${hasSchedule ? `Every ${esc(every(interval))}` : "Scheduling off"}</dd></div>${!native ? `<div><dt>Read saved Dockhand reports</dt><dd>${Number.isFinite(poll) ? `Every ${esc(every(poll))}` : "Not reported"}</dd></div>` : ""}</dl><p class="container-check-outcome">${esc(outcome)}</p><div class="container-option-actions"><button class="small" data-docker-settings="${esc(v.target.id)}">Docker management</button><a class="button small" href="/settings">Schedule settings</a></div></section>`;
   const operation = native
     ? "Native checks confirm image downloads before they start. Update stack recreates affected running services after confirmation; stopped services stay stopped. Compose services only; standalone containers and newer-version-tag advisories are not provided by this checker."
-    : "Dockhand compares registry digests without downloading image layers. Install container updates in Dockhand; Fleetdeck does not restart them.";
+    : "Dockhand compares registry digests without downloading image layers. Container updates run in Dockhand. When Install container updates is enabled for this machine, Fleetdeck can request them after confirmation. Otherwise, open Dockhand to install them.";
   const schedule = !native && s.scheduledAt ? `<p class="container-schedule-report">Dockhand scheduled: ${esc(ago(s.scheduledAt))} · ${esc(({ success: s.scheduledErrors ? `Completed with ${s.scheduledErrors} ${plural(s.scheduledErrors, "error", "errors")}` : "Completed", failed: "Failed", running: "Running", warning: "Completed with warnings", queued: "Queued", skipped: "Skipped" })[s.scheduledStatus] || "Result unavailable")}${s.scheduledChecked != null ? ` · ${s.scheduledChecked} containers checked` : ""}.</p>` : "";
   const history = `<section class="container-help-notes"><strong>How to change them</strong><p>Use <strong>Docker management</strong> for this machine’s provider${native ? " and policy" : ", connection and fresh-check permission"}. Use <strong>Schedule settings</strong> for <code>schedule.check_docker: true</code> (include containers) or <code>false</code> (OS only), and <code>schedule.check_every</code> for the interval.</p><p>${operation} Refresh inventory and dashboard polling only read saved reports. The machine’s Update button handles OS updates.</p><strong>Check history</strong><p>${native ? "Native check" : "Last Fleetdeck request"}: ${s.checkedAt ? esc(ago(s.checkedAt)) : "never"}.</p>${schedule}<p class="muted">Synced = reports fetched. Last checked = each row’s result or labelled failed attempt. Unknown means no reliable result; local images have no registry comparison. Counts may overlap. ${state.settings.dockhand_results_persistent === false ? "State storage is unavailable; results last until restart." : "Confirmed results are saved across Fleetdeck restarts."}</p></section>`;
   return `<details class="container-help"><summary>Current options and how to change them</summary><div class="container-help-body">${settings}${history}</div></details>`;
@@ -170,9 +188,10 @@ function containerPanel(v) {
 
   const tabs = [["all", "All", s.rows.length], ...(s.updates ? [["updates", "Image updates", s.updates]] : []), ...(s.current ? [["current", "Up to date", s.current]] : []), ...(s.reviews ? [["review", "Review", s.reviews]] : []), ...(s.coverage || s.scopeGap ? [["coverage", "Coverage", s.coverage || null]] : []), ...(s.failures ? [["failures", "Failures", s.failures]] : [])];
   const filters = `<div class="container-filters" role="group" aria-label="Filter container results">${tabs.map(([value, text, count]) => `<button class="small ghost" data-container-view-filter="${value}" data-id="${id}" data-focus-key="container-filter:${id}:${value}" aria-pressed="${filter === value}">${text}${count === null ? "" : ` <span>${count}</span>`}</button>`).join("")}</div>`;
-  const actions = native && dockerSettings(v).mode === "managed";
+  const actions = (native && dockerSettings(v).mode === "managed") || (!native && v.dockhand_updates_allowed);
   const seen = new Set();
   const action = row => {
+    if (!native) return dockhandUpdateButton(v, row);
     if (!actions || !row.nativeStack || seen.has(row.stack)) return "";
     seen.add(row.stack);
     const stack = row.nativeStack;
@@ -187,7 +206,7 @@ function containerPanel(v) {
   const categoryNote = filter === "coverage" && !native ? '<p class="container-notice-line muted">Local images have no registry counterpart, so repeating a check cannot compare them. Policy exclusions are intentional; new or replaced containers need a fresh matching result.</p>' : filter === "review" ? '<p class="container-notice-line muted">New version tags and pinned digests require manual review. Held image updates wait for their cooldown. These items are separate from applicable image updates.</p>' : "";
   const scope = native ? '<p class="container-notice-line muted">Coverage: Compose stacks only. Standalone containers are outside Fleetdeck checks.</p>' : "";
   const prune = native && dockerSettings(v).mode === "managed" ? `<label class="container-prune muted" title="Removes all unused, untagged images on this machine, not only this stack"><input type="checkbox" data-prune ${remember.get("pruneImages") ? "checked" : ""}> remove unused, untagged images after updating</label>` : "";
-  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("container")}${esc(v.target.name)}<span class="host-mode muted">${esc(mode)}</span>${button}${native ? `<button class="small" data-docker-settings="${id}">Settings</button>` : managerLink(v, "Open Dockhand")}</div><div class="container-overview"><div class="container-results-toolbar">${filters}<span class="container-sync muted">${native ? (s.error ? "Last attempt" : "Checked") : "Synced"} ${s.syncedAt ? ago(s.syncedAt) : "never"}${s.stale ? " · last-known results" : ""}</span></div>${notices}${scope}${prune}${categoryNote}${guidance}</div>${shown.length ? table : `<p class="container-empty muted">${s.rows.length ? "No matching per-container results in this category." : native ? (!v.stacks ? "Container images have not been checked. Fetch image updates to compare Compose images; nothing is restarted." : "No Docker Compose stacks found. Standalone containers are not checked by Fleetdeck; their update status is unknown.") : "Container status unavailable."}</p>`}</section>`;
+  return `<section class="group docker-host" id="docker-${id}"><div class="group-head">${icon("container")}${esc(v.target.name)}<span class="host-mode muted">${esc(mode)}</span>${button}${!native ? dockhandUpdateButton(v) : ""}${native ? `<button class="small" data-docker-settings="${id}">Settings</button>` : managerLink(v, "Open Dockhand")}</div><div class="container-overview"><div class="container-results-toolbar">${filters}<span class="container-sync muted">${native ? (s.error ? "Last attempt" : "Checked") : "Synced"} ${s.syncedAt ? ago(s.syncedAt) : "never"}${s.stale ? " · last-known results" : ""}</span></div>${notices}${scope}${prune}${categoryNote}${guidance}</div>${shown.length ? table : `<p class="container-empty muted">${s.rows.length ? "No matching per-container results in this category." : native ? (!v.stacks ? "Container images have not been checked. Fetch image updates to compare Compose images; nothing is restarted." : "No Docker Compose stacks found. Standalone containers are not checked by Fleetdeck; their update status is unknown.") : "Container status unavailable."}</p>`}</section>`;
 }
 
 function dockhandPanel(v) { return containerPanel(v); }

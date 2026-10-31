@@ -273,7 +273,7 @@ def scheduled_results(execution: dict, containers: list, environment_id: int) ->
 def demo_status(url: str) -> DockhandStatus:
     """An in-memory fixture for a mapped demo machine; never an HTTP request."""
     now = datetime.now(UTC)
-    return DockhandStatus(
+    result = DockhandStatus(
         manager_url=url,
         synced_at=now,
         stale=False,
@@ -304,7 +304,12 @@ def demo_status(url: str) -> DockhandStatus:
                 source="dockhand_schedule",
             ),
             ContainerStatus(
-                name="standalone", image="example/tool:latest", state="running", status="update", checked_at=now
+                name="standalone",
+                image="example/tool:latest",
+                state="running",
+                status="update",
+                image_update=True,
+                checked_at=now,
             ),
             ContainerStatus(
                 name="database",
@@ -365,6 +370,21 @@ def demo_status(url: str) -> DockhandStatus:
             ),
         ],
     )
+
+    for item in result.containers:
+        item.container_id = f"demo-{item.name}"
+    result.containers.append(
+        ContainerStatus(
+            container_id="demo-stopped",
+            name="stopped-service",
+            image="example/stopped:latest",
+            state="exited",
+            status="update",
+            image_update=True,
+            checked_at=now,
+        )
+    )
+    return result
 
 
 def normalize(containers: object, pending: object) -> list[ContainerStatus]:
@@ -447,6 +467,8 @@ class DockhandReader:
         self.next_poll = 0.0
         self.lock = asyncio.Lock()
         self.tasks: dict[str, asyncio.Task] = {}
+        self.updating: set[str] = set()
+        self.update_generation: dict[str, int] = {}
         self.last_started: dict[str, float] = {}
         self.checked: dict[str, dict[str, ContainerStatus]] = {}
         self.store = store
@@ -526,7 +548,11 @@ class DockhandReader:
         mapping = next((m for m in self.cfg.environments if m.target_id == target_id), None)
         if mapping is None:
             raise KeyError(target_id)
-        if target_id in self.tasks or time.monotonic() - self.last_started.get(target_id, -60) < 30:
+        if (
+            target_id in self.updating
+            or target_id in self.tasks
+            or time.monotonic() - self.last_started.get(target_id, -60) < 30
+        ):
             raise ValueError("A Dockhand check is running or was started recently; wait before retrying")
         if len(self.tasks) >= 4:
             raise ValueError("Four Dockhand checks are already running; wait before starting another")
@@ -660,8 +686,9 @@ class DockhandReader:
 
             async def read(mapping):
                 async with sem:
-                    if mapping.target_id in self.tasks:
+                    if mapping.target_id in self.tasks or mapping.target_id in self.updating:
                         return
+                    generation = self.update_generation.get(mapping.target_id, 0)
                     previous = self.status.get(mapping.target_id, DockhandStatus(manager_url=self.cfg.url))
                     try:
                         containers = await self._get("containers", mapping.environment_id)
@@ -680,20 +707,25 @@ class DockhandReader:
                             )
                         }
                         history_error = None
+                        outcomes = []
                         try:
                             summary, outcomes = await self._history(mapping.environment_id, containers)
-                            known = self.checked.setdefault(mapping.target_id, {})
-                            for outcome in outcomes:
-                                old = known.get(outcome.container_id)
-                                if not old or not old.checked_at or outcome.checked_at > old.checked_at:
-                                    known[outcome.container_id] = retain_findings(outcome, old)
                         except (httpx.HTTPError, ValueError, TypeError, KeyError):
                             history_error = (
                                 "Dockhand check history unavailable. Check read access to schedules "
                                 "and API compatibility; container inventory is still synced."
                             )
-                        if mapping.target_id in self.tasks:
+                        if (
+                            mapping.target_id in self.tasks
+                            or mapping.target_id in self.updating
+                            or generation != self.update_generation.get(mapping.target_id, 0)
+                        ):
                             return
+                        known = self.checked.setdefault(mapping.target_id, {})
+                        for outcome in outcomes:
+                            old = known.get(outcome.container_id)
+                            if not old or not old.checked_at or outcome.checked_at > old.checked_at:
+                                known[outcome.container_id] = retain_findings(outcome, old)
                         previous = self.status.get(mapping.target_id, previous)
                         self.status[mapping.target_id] = DockhandStatus(
                             manager_url=self.cfg.url,
@@ -712,6 +744,10 @@ class DockhandReader:
                         }
                         self._save(mapping.target_id)
                     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+                        if mapping.target_id in self.updating or generation != self.update_generation.get(
+                            mapping.target_id, 0
+                        ):
+                            return
                         # Never expose response bodies, URLs or exceptions that could contain credentials.
                         reason = "Dockhand status unavailable; check connection, permissions and API version."
                         if isinstance(exc, httpx.HTTPStatusError):

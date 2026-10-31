@@ -14,7 +14,7 @@ reads Machine, Scope, Status, Updates, Checked, Backup (when available), Actions
 independent update/review/coverage/failure metrics, check ages and provider-specific action.
 The **Update** button keeps its name and appears exclusively on the OS row. Native Docker uses
 **View stacks**, with the existing confirmed **Update stack** action inside details; external
-management links to the configured manager. Neither tab selection nor expanding details starts a check.
+management links to the configured manager. Dockhand can optionally expose confirmed Update containers actions, as described below. Neither tab selection nor expanding details starts a check.
 
 Both providers share the same compact details panel and flat table sorted by Stack then
 container/service name (case-insensitive, natural ordering). Containers without Compose metadata
@@ -796,3 +796,59 @@ Link-only mobile status now takes the remaining width after the Containers capti
 half the section. Its duplicate external-arrow icon is omitted (the provider caption keeps it),
 and container status text is wrapped in a text element so it stays together beside its icon.
 Simulated 320px and 390px checks keep Monitored externally on one line; 70 UI tests pass.
+
+
+## Confirmed updates through Dockhand
+
+Docker management now has **Check for container updates** (“Fleetdeck can trigger Dockhand to check
+for newer images”) and **Install container updates**. Installation is **off by default**, per machine:
+
+```yaml
+dockhand:
+  # URL/token/polling/check permission remain shared connection settings.
+  environments:
+    - target_id: your-exact-fleetdeck-target-id
+      environment_id: 1
+      allow_updates: false
+```
+
+Enable Install container updates in that machine’s popup, Save, then Apply (the existing provider
+configuration flow). This does not start any update or change a schedule. The live dashboard only
+shows installation actions after the running configuration permits them. OS Update and native
+Docker behavior are unchanged. Check all, polling, Refresh inventory and scheduled checks never
+install containers. Dockhand’s API token must permit container creation/recreation in that environment.
+
+The machine’s Containers row gains **Update containers**, with the same action in expanded details
+and individual eligible rows. Its confirmation reads fresh saved reports, shows each selected
+name/image/stack, permits deselection, and lists exclusions. Running containers are selected by
+default; stopped/exited/created containers may be selected explicitly and Dockhand preserves their
+stopped state. The confirmation notes that Dockhand may recreate dependent containers sharing a
+selected container’s network. No tag changes, image pruning or stack-file edits are requested.
+
+Only confirmed image updates checked within 24 hours qualify. Local/unmatched/failed results,
+version advisories, pinned digests, cooldowns and manager/dashboard self-updates are excluded.
+The backend rejects unavailable, check-only or monitor-only machines, conflicting machine/host
+jobs, duplicated selections and identities/images/running states changed since confirmation.
+It re-reads Dockhand inventory/pending records and checks labels/policy again immediately before
+sending the fixed batch-update endpoint for the mapped environment. Native Docker commands are
+never used on mapped hosts. A timed-out request is never retried automatically.
+
+Deployments appear as **dockhand-update** jobs in the normal activity/log view, use the existing
+machine lock/concurrency limit and block conflicting host updates/reboots and config Apply.
+Each result must match a selected name (IDs change during recreation); partial, skipped, warning,
+malformed and failed replies are not reported as a fully successful batch. Provider error payloads
+are not copied to logs. Confirmed image results are invalidated before transmission: uncertain or
+interrupted requests cannot retain a healthy result. These jobs are not resumed/replayed after a
+Fleetdeck restart. Refresh inventory discovers new IDs; a subsequent image check confirms status.
+
+Verification used mocks and an isolated demo on localhost only, including end-to-end selection,
+confirmation, stopped-container selection and job completion. The demo never creates a real
+Dockhand client. No user configuration or homelab was contacted, and the feature remains disabled
+by default. UI regression tests cover off-by-default behavior, selection, escaping and per-machine
+save; backend tests cover default/isolated permissions, identity/state changes, policy/label
+revocation, parent jobs, duplicate prevention, partial replies, timeouts and interrupted-job history.
+
+Final checks: 72 offline UI tests and 119 Dockhand/provider regression tests pass; lint, formatting
+and diff checks pass. The broader run passed 547 tests initially; its 9 loopback-server failures
+all passed after loopback permission was restored (6 skips and 7 known platform exclusions).
+Pre-deployment polls are versioned so an in-flight old report cannot restore invalidated results.
