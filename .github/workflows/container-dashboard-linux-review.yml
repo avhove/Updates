@@ -1,0 +1,29 @@
+name: Isolated container dashboard Linux review
+on:
+  push:
+    branches: [ci/container-dashboard-linux-review]
+permissions:
+  contents: read
+jobs:
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Original upstream main
+            ref: 81fa17f0f8f9dd0110cba2602715a1256a212fee
+          - name: Cleaned container dashboard proposal
+            ref: 325b0fb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[dev]'
+      - run: ruff check . && ruff format --check .
+      - run: python -m pytest -q
