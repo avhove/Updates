@@ -875,3 +875,9 @@ polling and restarts; explicit later provider findings supersede it. No extra re
 is requested. The next normal scheduled or manual check reassesses the container. Failed,
 skipped, warning or mismatched replacements never become healthy from this confirmation.
 Updates performed directly in Dockhand still need a matching API result for the new ID.
+
+Coverage exceptions appear only in the coverage metric and per-container details, not as an
+overall host status. If only coverage exceptions remain, the host summary says **Up to date**.
+Updates, review findings, running checks, stale data and errors retain their existing priority.
+Individual unknown/local/excluded results and unavailable counts remain explicit; the summary
+does not turn them into successful checks. An empty inventory still says **Not checked**.

@@ -1714,3 +1714,35 @@ test("updated-image spinner appears only while a fresh check is actually running
   assert.equal(ui.document.querySelector('.container-results-table tbody tr .spin'),null);
   assert.match(ui.document.querySelector('.container-results-table tbody tr').textContent,/Up to date/);
 });
+
+test("coverage stays in details without replacing the overall up-to-date status", async () => {
+  for (const mobile of [false, true]) {
+    const coverage = [{name:'local',image:'local:1',state:'running',status:'local'},
+      {name:'unknown',image:'app:1',state:'running',status:'unknown'},
+      {name:'excluded',image:'app:2',state:'running',status:'excluded'}];
+    const cases = [
+      ['coverage-only', coverage, {}, 'Up to date'],
+      ['mixed-current', [...coverage,{name:'current',status:'current'}], {}, 'Up to date'],
+      ['updates', [...coverage,{name:'update',status:'update',image_update:true}], {}, 'Updates available'],
+      ['review', [...coverage,{name:'review',status:'advisory',advisory:true}], {}, 'Review needed'],
+      ['failure', [...coverage,{name:'failed',status:'failed'}], {}, 'Check failed'],
+      ['checking', coverage, {checking:true}, 'Checking containers…'],
+      ['stale', coverage, {stale:true}, 'Last-known results'],
+      ['unavailable', coverage, {error:'Unavailable'}, 'Check unavailable'],
+      ['empty', [], {}, 'Not checked'],
+    ];
+    const ui=await dashboard({mobile, targets:cases.map(([id,containers,flags]) => machine(id,{view:{dockhand:{stale:false,containers,...flags}}}))});
+    for (const [id,,,label] of cases) {
+      const row=ui.document.querySelector(mobile ? `[data-machine-row="${id}"] .mc-containers` : `[data-container-row="${id}"]`);
+      assert.equal(row.querySelector('.container-status-hit').textContent,label);
+      assert.doesNotMatch(row.querySelector('.container-status-hit').textContent,/Coverage exceptions/);
+    }
+    ui.click('[data-open-docker="coverage-only"][data-container-filter="coverage"]');
+    const panel=ui.document.querySelector(mobile ? '.mc-container-panel' : '.container-detail');
+    assert.match(panel.textContent,/Coverage 3/);
+    assert.match(panel.textContent,/Local image · no registry comparison available/);
+    assert.match(panel.textContent,/Check result unavailable/);
+    assert.match(panel.textContent,/Excluded by policy/);
+    assert.equal(ui.calls.some(c=>c.method==='POST'),false);
+  }
+});
