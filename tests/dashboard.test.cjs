@@ -353,7 +353,7 @@ test("last-known results stay visible without stale update or reboot actions", a
   assert.equal(doc.querySelector("#confirm").open, true);
   assert.equal(ui.calls.some((call) => call.path === "/api/actions"), false);
   const scheduled = doc.querySelector('[data-machine-row="scheduled"]');
-  assert.equal(scheduled.querySelector(".backup-cell").textContent, "—");
+  assert.equal(scheduled.querySelector(".backup-cell").textContent, "");
   assert.ok(scheduled.querySelector(".backup-job"));
   assert.ok(scheduled.querySelector(".machine-os"));
   for (const table of doc.querySelectorAll(".machine-table")) {
@@ -526,14 +526,14 @@ test("machine backup context uses neutral information popovers", async () => {
   const guest = doc.querySelector('[data-machine-row="guest"]');
   const unscheduled = doc.querySelector('[data-machine-row="unscheduled"]');
   const standalone = doc.querySelector('[data-machine-row="standalone"]');
-  assert.equal(node.querySelector(".backup-cell").textContent.trim(), "—");
+  assert.equal(node.querySelector(".backup-cell").textContent.trim(), "");
   assert.equal(node.querySelector(".backup-job-cell").textContent.trim(), "");
   assert.match(guest.querySelector(".backup-cell").textContent, /h ago/);
   assert.equal(guest.querySelector(".backup-cell").hasAttribute("title"), false);
   assert.equal(guest.querySelector(".backup-job").getAttribute("aria-label"), "Covered by a backup job");
-  assert.equal(unscheduled.querySelector(".backup-missing").getAttribute("aria-label"), "No backup found");
+  assert.equal(unscheduled.querySelector(".backup-cell").textContent.trim(), "");
   assert.equal(unscheduled.querySelector(".backup-job-cell").textContent.trim(), "");
-  assert.equal(standalone.querySelector(".backup-missing").getAttribute("aria-label"), "No backup found");
+  assert.equal(standalone.querySelector(".backup-cell").textContent.trim(), "");
   assert.equal(standalone.querySelector(".backup-job-cell").textContent.trim(), "");
   assert.equal(guest.closest("table").querySelector("th.section-start:nth-last-child(2)").textContent, "Backup");
   const css = read("style.css");
@@ -2045,14 +2045,12 @@ test("container identities label all four management modes without enabling acti
 });
 
 
-test("Containers marks its tree scope and missing backup ages use explicit placeholders", async () => {
+test("Containers marks its tree scope and missing backup ages remain blank", async () => {
   const ui = await dashboard({ targets: [machine('pve', { target: { backup: { last: null, note: 'Not configured', not_set_up: true } }, check: { docker_installed: true } }), machine('guest', { guest: true, parent: 'pve', check: { docker_installed: true } })] });
   ui.setView('containers');
   for (const table of ui.document.querySelectorAll('.machine-table')) assert.ok(table.classList.contains('containers-only'));
   for (const row of ui.document.querySelectorAll('[data-machine-row]')) {
-    const missing = row.querySelector('.backup-missing');
-    assert.equal(missing.textContent, '—');
-    assert.ok(missing.getAttribute('title'));
+    assert.equal(row.querySelector('.backup-cell').textContent.trim(), '');
   }
   ui.setView('all');
   assert.equal(ui.document.querySelector('.containers-only'), null);

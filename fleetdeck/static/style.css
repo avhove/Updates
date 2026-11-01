@@ -1399,3 +1399,8 @@ a.brand { color: var(--text); text-decoration: none; }
 @media (min-width: 1120px) {
   .dashboard-page .machine-table.containers-only .machine-cell { --tree-color: var(--container-tone); }
 }
+
+/* Start a container-only guest tree at the body edge, below the header. */
+@media (min-width: 1120px) {
+  .dashboard-page .machine-table.containers-only tr.first-guest .machine-cell::after { top: 0; }
+}

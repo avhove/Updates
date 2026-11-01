@@ -190,12 +190,8 @@ function compactOS(os) {
 
 function backupCell(t) {
   const b = t.backup;
-  if (!b) return `<span class="backup-missing muted" aria-label="Backup information unavailable" title="Backup information unavailable">—</span>`;
-  if (b.last) {
-    return `<span class="${b.stale ? "warn" : ""}" title="${esc(window.FleetdeckDates.dateTime(b.last))}">${ago(b.last)}</span>`;
-  }
-  const label = b.note && !b.stale && !b.not_set_up ? "Backup information unavailable" : "No backup found";
-  return `<span class="backup-missing muted" aria-label="${label}" title="${label}">—</span>`;
+  if (!b?.last) return "";
+  return `<span class="${b.stale ? "warn" : ""}" title="${esc(window.FleetdeckDates.dateTime(b.last))}">${ago(b.last)}</span>`;
 }
 
 function backupJobCell(t) {
