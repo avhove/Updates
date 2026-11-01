@@ -1373,3 +1373,29 @@ a.brand { color: var(--text); text-decoration: none; }
 /* Keep check ages compact and give backup age plus schedule icon more room. */
 .dashboard-page .machine-table col.col-checked { width: 112px; }
 .dashboard-page .machine-table col.col-backup { width: 110px; }
+
+/* When the container footer is just More, share its row with the counters. */
+@media (max-width: 1119px) {
+  .dashboard-page .mc-card:has(.mc-os-scope) .mc-containers:has(> .scope-actions:not(:has(> :not(.more-actions)))) > .container-indicators {
+    grid-column: 1 / -1;
+    padding-right: 44px;
+    box-sizing: border-box;
+    grid-row: 3;
+    min-height: 0;
+    margin: 0;
+    align-self: center;
+  }
+  .dashboard-page .mc-card:has(.mc-os-scope) .mc-containers > .scope-actions:not(:has(> :not(.more-actions))) {
+    grid-column: 2;
+    grid-row: 3;
+    width: auto;
+    margin-top: 0;
+    justify-self: end;
+    align-self: center;
+  }
+}
+
+/* In Containers view every visible tree connector belongs to containers. */
+@media (min-width: 1120px) {
+  .dashboard-page .machine-table.containers-only .machine-cell { --tree-color: var(--container-tone); }
+}

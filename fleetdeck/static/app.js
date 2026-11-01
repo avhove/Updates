@@ -190,16 +190,12 @@ function compactOS(os) {
 
 function backupCell(t) {
   const b = t.backup;
-  if (!b) return isProxmoxNode(t) ? "" : `<span class="backup-missing muted" aria-label="Backup information unavailable">—</span>`;
+  if (!b) return `<span class="backup-missing muted" aria-label="Backup information unavailable" title="Backup information unavailable">—</span>`;
   if (b.last) {
     return `<span class="${b.stale ? "warn" : ""}" title="${esc(window.FleetdeckDates.dateTime(b.last))}">${ago(b.last)}</span>`;
   }
-  if (isProxmoxNode(t)) {
-    // Proxmox node configuration-backup context is available from the neutral information popover.
-    return "";
-  }
   const label = b.note && !b.stale && !b.not_set_up ? "Backup information unavailable" : "No backup found";
-  return `<span class="backup-missing muted" aria-label="${label}">—</span>`;
+  return `<span class="backup-missing muted" aria-label="${label}" title="${label}">—</span>`;
 }
 
 function backupJobCell(t) {
@@ -417,7 +413,7 @@ function render() {
     return `
     <div class="group">
       <div class="group-head"><span class="chip">${PLATFORM[g.platform] || g.platform}</span> ${esc(g.title)}</div>
-      <div class="group-scroll"><table class="machine-table${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
+      <div class="group-scroll"><table class="machine-table${state.view === "containers" ? " containers-only" : ""}${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
         <colgroup><col class="col-select"><col class="col-machine"><col class="col-status"><col class="col-updates"><col class="col-checked">${withBackup ? '<col class="col-backup">' : ""}<col class="col-actions"></colgroup>
         ${machineTableHead(withBackup)}
         ${rows}

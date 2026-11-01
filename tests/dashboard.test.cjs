@@ -526,7 +526,7 @@ test("machine backup context uses neutral information popovers", async () => {
   const guest = doc.querySelector('[data-machine-row="guest"]');
   const unscheduled = doc.querySelector('[data-machine-row="unscheduled"]');
   const standalone = doc.querySelector('[data-machine-row="standalone"]');
-  assert.equal(node.querySelector(".backup-cell").textContent.trim(), "");
+  assert.equal(node.querySelector(".backup-cell").textContent.trim(), "—");
   assert.equal(node.querySelector(".backup-job-cell").textContent.trim(), "");
   assert.match(guest.querySelector(".backup-cell").textContent, /h ago/);
   assert.equal(guest.querySelector(".backup-cell").hasAttribute("title"), false);
@@ -2042,4 +2042,18 @@ test("container identities label all four management modes without enabling acti
     assert.ok(provider.querySelector('.ui-icon'));
     assert.equal(ui.calls.some(c => c.method === 'POST'), false);
   }
+});
+
+
+test("Containers marks its tree scope and missing backup ages use explicit placeholders", async () => {
+  const ui = await dashboard({ targets: [machine('pve', { target: { backup: { last: null, note: 'Not configured', not_set_up: true } }, check: { docker_installed: true } }), machine('guest', { guest: true, parent: 'pve', check: { docker_installed: true } })] });
+  ui.setView('containers');
+  for (const table of ui.document.querySelectorAll('.machine-table')) assert.ok(table.classList.contains('containers-only'));
+  for (const row of ui.document.querySelectorAll('[data-machine-row]')) {
+    const missing = row.querySelector('.backup-missing');
+    assert.equal(missing.textContent, '—');
+    assert.ok(missing.getAttribute('title'));
+  }
+  ui.setView('all');
+  assert.equal(ui.document.querySelector('.containers-only'), null);
 });
