@@ -15,8 +15,8 @@ jobs:
         include:
           - name: Original upstream main
             ref: 81fa17f0f8f9dd0110cba2602715a1256a212fee
-          - name: Cleaned container dashboard proposal
-            ref: 1dda8e6434d2791ca29f8ba3c0d634286fd09b3b
+          - name: Release container dashboard
+            ref: f7b3e22c46d74cab1765642c564beab03c110454
     steps:
       - uses: actions/checkout@v7
         with:
@@ -26,21 +26,53 @@ jobs:
           python-version: '3.12'
       - run: pip install -e '.[dev]'
       - run: ruff check . && ruff format --check .
-      - name: Diagnose isolated demo discovery
-        run: |
-          python - <<'PYCODE'
-          import asyncio, time
-          from fleetdeck.providers.demo import DemoProvider
-          from fleetdeck.app import create_app
-          from fleetdeck.config import AppConfig
-          from fastapi.testclient import TestClient
-          print("monotonic", time.monotonic())
-          try:
-              print("direct demo targets", len(asyncio.run(DemoProvider().discover())))
-          except Exception as error:
-              print("direct demo error", type(error).__name__, str(error))
-          with TestClient(create_app(AppConfig(demo=True))) as client:
-              data = client.get("/api/targets").json()
-              print("API targets", len(data.get("targets", [])), "errors", data.get("errors"))
-          PYCODE
       - run: python -m pytest -q -ra
+  image:
+    name: Release Docker image build and isolated demo
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: f7b3e22c46d74cab1765642c564beab03c110454
+      - name: Build production Dockerfile without publishing
+        run: docker build --tag fleetdeck-review:local .
+      - name: Start isolated simulated dashboard
+        run: |
+          docker run --detach --name fleetdeck-review --network none \
+            --env FLEETDECK_DEMO=1 --env FLEETDECK_ALLOW_NO_AUTH=1 \
+            fleetdeck-review:local
+      - name: Verify packaged dashboard and demo API
+        run: |
+          docker exec -i fleetdeck-review python - <<'PYCODE'
+          import json
+          import time
+          import urllib.request
+          from pathlib import Path
+          import fleetdeck
+          for attempt in range(60):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8080/api/targets', timeout=2) as response:
+                      data = json.load(response)
+                  if len(data.get('targets', [])) >= 8:
+                      break
+              except (OSError, ValueError):
+                  pass
+              time.sleep(1)
+          else:
+              raise RuntimeError('Simulated inventory did not become ready')
+          assert all(item['target']['id'].startswith('demo:') for item in data['targets'])
+          with urllib.request.urlopen('http://127.0.0.1:8080/', timeout=5) as response:
+              page = response.read().decode()
+          assert 'Fleetdeck' in page and '/static/containers.js' in page
+          static = Path(fleetdeck.__file__).parent / 'static'
+          assert 'containerEngineLight' in (static / 'containers.js').read_text()
+          assert 'containers-only' in (static / 'style.css').read_text()
+          assert Path('/usr/local/bin/wireproxy').is_file()
+          print('Image smoke test passed:', len(data['targets']), 'simulated targets; packaged UI and wireproxy present')
+          PYCODE
+      - name: Logs and cleanup
+        if: always()
+        run: |
+          docker logs fleetdeck-review || true
+          docker rm --force --volumes fleetdeck-review || true
