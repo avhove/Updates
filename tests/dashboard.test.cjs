@@ -223,7 +223,7 @@ test("bulk actions appear only after selection; updates still require confirmati
   ui.click('[data-toggle="guest"]');
   assert.equal(doc.querySelector(".pkgs img"), null);
   assert.match(doc.querySelector(".pkgs").textContent, /<img src=x/);
-  assert.equal(doc.querySelector(".pkgs td[colspan]").getAttribute("colspan"), "7");
+  assert.equal(doc.querySelector(".pkgs td[colspan]").getAttribute("colspan"), "6");
   ui.click('[data-act="upgrade"]');
   assert.equal(doc.querySelector("#confirm").open, true);
   assert.equal(doc.querySelector("#confirm-snapshot-row").hidden, false);
@@ -253,9 +253,9 @@ test("update columns separate security, packages and phased updates with only re
   });
   const doc = ui.document;
   const headers = [...doc.querySelectorAll(".machine-table > thead .column-headings th")].map((el) => el.textContent.trim());
-  assert.deepEqual(headers, ["", "Machine", "Scope", "Status", "Updates", "Checked", "Actions"]);
+  assert.deepEqual(headers, ["", "Machine", "Status", "Updates", "Checked", "Actions"]);
   assert.equal(doc.querySelectorAll(".machine-table > thead > tr").length, 1);
-  assert.equal(doc.querySelectorAll(".machine-table > colgroup > col").length, 7);
+  assert.equal(doc.querySelectorAll(".machine-table > colgroup > col").length, 6);
   assert.equal(doc.querySelector(".row-actions-heading").textContent, "Actions");
   assert.match(read("style.css"), /\.more-heading, \.dashboard-page td\.more-cell \{ padding-inline: 4px; text-align: center; \}/);
   assert.equal(doc.querySelector('[data-machine-row="pve"] .type-chip').textContent.trim(), "Node");
@@ -630,7 +630,7 @@ test("optional Docker status is separate, honest about failed checks, and never 
   const dockerTable = ui.document.querySelector('[data-machine-row="docker-vm"]').closest("table");
   assert.equal(dockerTable.classList.contains("has-backup"), true);
   assert.equal(dockerTable.classList.contains("has-containers"), true);
-  assert.equal(dockerTable.querySelectorAll("colgroup > col").length, 8);
+  assert.equal(dockerTable.querySelectorAll("colgroup > col").length, 7);
   assert.equal(ui.document.querySelectorAll('.container-indicator[data-open-docker][data-container-filter="updates"]').length, 1);
   ui.click('[data-open-docker="docker-vm"]');
   assert.equal(ui.document.querySelector("#groups").hidden, false);
@@ -697,7 +697,7 @@ test("native Docker counts services, distinguishes missing Compose coverage and 
   assert.equal(ui.document.querySelector('.container-indicator[data-open-docker="empty"]'), null);
   ui.click('[data-open-docker="empty"]');
   assert.match(ui.document.querySelector('.container-detail').textContent, /Standalone containers are not checked/);
-  assert.equal(ui.document.querySelectorAll('.scope-cell').length, 4);
+  assert.equal(ui.document.querySelectorAll('.scope-cell').length, 0);
   assert.equal(ui.document.querySelector('[data-act="upgrade"]').textContent, 'Update');
   ui.click('[data-act="upgrade"]');
   assert.match(ui.document.querySelector('#confirm-text').textContent, /Container images are managed separately/);
@@ -786,7 +786,7 @@ test("configuration monitor-only policy remains read-only on both layouts", asyn
   }
 });
 
-test("one header and independent scope rows share machine identity and backup context", async () => {
+test("one header and separate scope identities retain shared backup context", async () => {
   for (const backup of [false, true]) for (const containers of [false, true]) {
     const ui = await dashboard({ docker: containers, containers, targets: [machine('containers-production-primary', {
       target: backup ? { backup: { last: now, in_job: true } } : {},
@@ -801,15 +801,15 @@ test("one header and independent scope rows share machine identity and backup co
     assert.equal(row.querySelector('.machine-meta').textContent, 'Ubuntu 24.04.1');
     assert.equal(row.querySelector('.machine-meta').children.length, 1);
     assert.equal(table.querySelectorAll('thead tr').length, 1);
-    assert.deepEqual([...table.querySelectorAll('thead th')].map(h => h.textContent), ['', 'Machine', 'Scope', 'Status', 'Updates', 'Checked', ...(backup ? ['Backup'] : []), 'Actions']);
-    assert.equal(row.querySelector('.machine-cell').getAttribute('rowspan'), containers ? '2' : null);
+    assert.deepEqual([...table.querySelectorAll('thead th')].map(h => h.textContent), ['', 'Machine', 'Status', 'Updates', 'Checked', ...(backup ? ['Backup'] : []), 'Actions']);
+    assert.equal(row.querySelector('.machine-cell').getAttribute('rowspan'), null);
     assert.equal(row.querySelector('.last-check').getAttribute('data-label'), 'OS checked');
     assert.ok(row.querySelector('.update-action-cell').classList.contains('section-start'));
     if (backup) assert.equal(row.querySelector('.backup-cell').getAttribute('rowspan'), containers ? '2' : null);
     if (containers) {
       assert.ok(second.querySelector('.containers-cell'));
       assert.equal(second.querySelector('.container-check').getAttribute('data-label'), 'Containers checked');
-      assert.equal(second.querySelector('.machine-cell'), null);
+      assert.match(second.querySelector('.container-label').textContent, /^Containers/);
       assert.equal(second.querySelector('.backup-cell'), null);
       assert.equal(second.querySelector('[data-act="upgrade"]'), null);
     } else assert.equal(second, null);
@@ -1142,7 +1142,7 @@ test("rowspan accounting holds with both detail panels open and container KPI pr
     assert.equal([...row.children].reduce((n,c) => n + Number(c.getAttribute('colspan') || 1), 0) + carried, columns);
     carried = [...row.children].filter(c => c.getAttribute('rowspan') === '2').length;
   });
-  assert.equal(group.querySelectorAll('.machine-cell').length, 1);
+  assert.equal(group.querySelectorAll('.machine-cell').length, 2);
   assert.equal(group.querySelectorAll('.backup-cell').length, 1);
   assert.equal(ui.calls.some(c => c.method === 'POST'), false);
 });
@@ -1969,5 +1969,77 @@ test("offline container hosts retain saved counters with a last-known check time
         assert.doesNotMatch(time().textContent, /Last known/);
       }
     }
+  }
+});
+
+
+test("All splits machine identity into a nested container row with provider-specific engine metadata", async () => {
+  for (const dockhand of [false, true]) {
+    const target = machine('apps', { guest: true, parent: 'pve', check: { os: 'Debian 13', docker_installed: true }, view: dockhand
+      ? { dockhand: { stale: false, docker_version: '28.5.1', containers: [] } }
+      : { stacks: { docker: 'yes', docker_version: '27.5.0', checked_at: now, stacks: [] } } });
+    const ui = await dashboard({ targets: [machine('pve'), target] });
+    ui.setView('all');
+    const row = ui.document.querySelector('[data-machine-row="apps"]');
+    const child = ui.document.querySelector('[data-container-row="apps"]');
+    assert.equal(row.querySelector('.machine-cell').getAttribute('rowspan'), null);
+    assert.equal(row.querySelector('.selection-cell').getAttribute('rowspan'), null);
+    assert.ok(row.querySelector('.container-tree-stem'));
+    assert.ok(child.querySelector('.container-machine-cell.nested-guest'));
+    assert.match(child.querySelector('.container-label').textContent, /^Containers/);
+    assert.equal(child.querySelector('.docker-version').textContent, dockhand ? 'Docker 28.5.1' : 'Docker 27.5.0');
+    assert.equal(child.querySelector('input[type="checkbox"]'), null);
+    ui.setView('machines');
+    assert.equal(ui.document.querySelector('.container-tree-stem'), null);
+    ui.setView('containers');
+    assert.equal(ui.document.querySelector('.container-machine-cell'), null);
+    assert.equal(ui.document.querySelector('.machine-name').textContent, 'apps');
+    assert.equal(ui.document.querySelector('.machine-meta .docker-version').textContent, dockhand ? 'Docker 28.5.1' : 'Docker 27.5.0');
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
+});
+
+
+test("container branch dots use engine evidence and stopped hosts override cached healthy reports", async () => {
+  for (const provider of ['native', 'dockhand']) {
+    const target = machine('engine', { check: { docker_installed: true }, view: provider === 'native'
+      ? { stacks: { docker: 'yes', checked_at: now, stacks: [] } }
+      : { dockhand: { docker_version: '28.5.1', synced_at: now, stale: false, containers: [] } } });
+    const ui = await dashboard({ targets: [target] });
+    ui.setView('all');
+    const dot = () => ui.document.querySelector('.container-engine-state .dot');
+    assert.ok(dot().classList.contains('on'));
+    assert.equal(ui.document.querySelector('.scope-cell'), null);
+    assert.ok(ui.document.querySelector('.container-label .scope-provider'));
+    target.target.status = 'stopped'; target.target.updatable = false;
+    await ui.load();
+    assert.ok(dot().classList.contains('off'));
+    target.target.status = 'offline';
+    await ui.load();
+    assert.equal(dot().classList.contains('on'), false);
+    assert.equal(dot().classList.contains('off'), false);
+    target.target.status = 'running'; target.target.updatable = true;
+    if (provider === 'native') target.stacks.error = 'Report unavailable';
+    else target.dockhand.stale = true;
+    await ui.load();
+    assert.equal(dot().classList.contains('on'), false);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
+});
+
+test("container identities label all four management modes without enabling actions", async () => {
+  const variants = [
+    ['managed', 'Fleetdeck', { docker_settings: { mode: 'managed' } }],
+    ['monitor', 'Fleetdeck · monitor only', { docker_settings: { mode: 'monitor' } }],
+    ['dockhand', 'Dockhand', { dockhand: { stale: false, synced_at: now, containers: [] } }],
+    ['external', 'Portainer', { docker_settings: { mode: 'external', manager_name: 'Portainer' } }],
+  ];
+  for (const [id, label, view] of variants) {
+    const ui = await dashboard({ targets: [machine(id, { check: { docker_installed: true }, view })] });
+    ui.setView('all');
+    const provider = ui.document.querySelector('.container-label .scope-provider');
+    assert.equal(provider.querySelector('.provider-label').textContent, label);
+    assert.ok(provider.querySelector('.ui-icon'));
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
   }
 });

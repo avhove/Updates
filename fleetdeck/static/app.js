@@ -243,7 +243,7 @@ function managerLink(v, label) {
 
 // One header: each domain owns its status, metrics, check time and action.
 function machineTableHead(withBackup) {
-  return `<thead><tr class="column-headings"><th scope="col" aria-label="Selection"></th><th scope="col">Machine</th><th scope="col" class="section-start">Scope</th><th scope="col">Status</th><th scope="col">Updates</th><th scope="col" title="Check results for this row’s OS or containers; never the inventory sync time">Checked</th>${withBackup ? '<th scope="col" class="section-start">Backup</th>' : ""}<th scope="col" class="section-start row-actions-heading">Actions</th></tr></thead>`;
+  return `<thead><tr class="column-headings"><th scope="col" aria-label="Selection"></th><th scope="col">Machine</th><th scope="col" class="section-start">Status</th><th scope="col">Updates</th><th scope="col" title="Check results for this row’s OS or containers; never the inventory sync time">Checked</th>${withBackup ? '<th scope="col" class="section-start">Backup</th>' : ""}<th scope="col" class="section-start row-actions-heading">Actions</th></tr></thead>`;
 }
 
 function osCheckTime(v) {
@@ -279,27 +279,28 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
   if (state.selected.has(t.id)) rowClasses.push("is-selected");
   const showOs = state.view !== "containers", hasContainers = hasDocker(v) && state.view !== "machines";
   const span = showOs && hasContainers ? ' rowspan="2"' : "";
+  const dockerMeta = hasContainers ? containerVersion(v) : "";
+  if (showOs && hasContainers) rowClasses.push("has-container-row");
+  const continuesTree = t.kind === "host" ? relation.hasGuests : !!t.parent && !relation.lastGuest;
   const metrics = [["security", securityPackages(shown).length], ["package", regularPackages(shown).length], ["phased", phasedPackages(shown).length]]
     .map(([kind, count]) => count ? metricButton(v, kind, count) : `<span class="metric-slot-empty" data-metric-slot="${kind}" aria-hidden="true"></span>`).join("");
   const hasMetrics = actionablePackages(shown).length > 0 || phasedPackages(shown).length > 0;
   const rebootSlot = reboot || '<span class="metric-slot-empty" data-metric-slot="reboot" aria-hidden="true"></span>';
   const osStatus = shown?.packages?.length ? `<button class="os-status-hit" data-toggle="${esc(t.id)}" data-focus-key="os-status:${esc(t.id)}" aria-expanded="${state.expanded.has(t.id)}" aria-controls="packages-${esc(t.id)}" aria-label="OS status for ${esc(t.name)}; view package details">${updateState(v)}</button>` : updateState(v);
-  const identityCells = `<td class="selection-cell"${span}>${showOs ? `<label class="machine-select"><input type="checkbox" aria-label="Select ${esc(t.name)} for OS updates" title="Select for OS package updates only" data-select="${esc(t.id)}" data-focus-key="select:${esc(t.id)}" ${state.selected.has(t.id) ? "checked" : ""} ${selectable(v) && !relation.context ? "" : "disabled"}><span class="mobile-select-label">Select</span></label>` : ""}</td>
-    <td class="name machine-cell" data-label="Machine"${span}><div class="machine-cell-inner"><span class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-identity"><span class="machine-name" title="${esc(t.name)}">${esc(t.name)}</span><span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}${monitor}</span><span class="machine-meta">${shown?.os ? `<span class="machine-os" title="${esc(shown.os)}">${esc(compactOS(shown.os))}</span>` : ""}</span></span></div></td>`;
+  const identityCells = `<td class="selection-cell">${showOs ? `<label class="machine-select"><input type="checkbox" aria-label="Select ${esc(t.name)} for OS updates" title="Select for OS package updates only" data-select="${esc(t.id)}" data-focus-key="select:${esc(t.id)}" ${state.selected.has(t.id) ? "checked" : ""} ${selectable(v) && !relation.context ? "" : "disabled"}><span class="mobile-select-label">Select</span></label>` : ""}</td>
+    <td class="name machine-cell" data-label="Machine"><div class="machine-cell-inner"><span class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-identity"><span class="machine-name" title="${esc(t.name)}">${esc(t.name)}</span><span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}${monitor}${!showOs ? containerProvider(v) : ""}</span><span class="machine-meta">${showOs ? (shown?.os ? `<span class="machine-os" title="${esc(shown.os)}">${esc(compactOS(shown.os))}</span>` : "") : containerVersion(v)}</span></span></div>${showOs && hasContainers ? '<span class="container-tree-stem" aria-hidden="true"></span>' : ""}</td>`;
   const sharedBackup = withBackup ? `<td class="backup-cell section-start" data-label="Backup"${span}><div class="scope-backup">${backupCell(t)}<span class="backup-job-cell">${backupJobCell(t)}</span></div></td>` : "";
   let html = showOs ? `<tr class="${rowClasses.join(" ")} scope-os" data-machine-row="${esc(t.id)}" aria-label="${esc(t.name)} operating system">
     ${identityCells}
-    <td class="scope-cell section-start" data-label="Scope">OS</td>
-    <td class="update-status-cell" data-label="OS status">${osStatus}</td>
+    <td class="update-status-cell section-start" data-label="OS status">${osStatus}</td>
     <td class="update-metric-cell scope-metrics" data-label="Updates"><div class="os-metrics">${metrics}${rebootSlot}</div></td>
     <td class="last-check" data-label="OS checked">${osCheckTime(v)}</td>
     ${sharedBackup}
     <td class="update-action-cell section-start" data-label="OS actions"><div class="scope-actions"><span class="primary-action">${relation.context ? "" : nextAction(v)}</span>${rowMenu(v)}</div></td>
   </tr>` : "";
   if (hasContainers) html += `<tr class="container-row${!showOs ? " machine-row " + rowClasses.join(" ") : ""}${v.hidden ? " is-hidden" : ""}${relation.context ? " is-context" : ""}${state.selected.has(t.id) ? " is-selected" : ""}" data-container-row="${esc(t.id)}" ${!showOs ? `data-machine-row="${esc(t.id)}"` : ""} aria-label="${esc(t.name)} containers">
-    ${!showOs ? identityCells : ""}
-    <td class="scope-cell section-start" data-label="Scope">${containerScope(v)}</td>
-    <td class="container-status-cell" data-label="Container status"><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button></td>
+    ${!showOs ? identityCells : `<td class="selection-cell" aria-hidden="true"></td><td class="name machine-cell container-machine-cell${t.kind !== "host" ? " nested-guest" : ""}${continuesTree ? " tree-continues" : ""}" data-label="Machine"><div class="machine-cell-inner">${containerMachineIdentity(v)}</div></td>`}
+    <td class="container-status-cell section-start" data-label="Container status"><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button></td>
     <td class="containers-cell scope-metrics" data-label="Updates">${dockerCell(v, false)}</td>
     <td class="last-check container-check" data-label="Containers checked">${containerCheckTime(v)}</td>
     ${!showOs ? sharedBackup : ""}
@@ -312,11 +313,11 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     const more = rowMenu(v);
     html = `<article class="mc-card${relation.context ? " is-context" : ""}${v.hidden ? " is-hidden" : ""}" data-machine-row="${esc(t.id)}">
       <div class="mc-header"><div class="machine-main"><span class="state" title="${esc(t.status)}"><span class="dot ${DOT[t.status] || ""}"></span></span><span class="machine-name">${esc(t.name)}</span></div></div>
-      <div class="mc-meta-row"><div class="machine-meta"><span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}${os ? `<span class="machine-os" title="${esc(os)}">${esc(compactOS(os))}</span>` : ""}${monitor}</div></div>
+      <div class="mc-meta-row"><div class="machine-meta"><span class="chip type-chip">${esc(kindLabel(t))}</span>${self}${cs}${note}${showOs && os ? `<span class="machine-os" title="${esc(os)}">${esc(compactOS(os))}</span>` : ""}${!showOs ? dockerMeta : ""}${monitor}</div></div>
       ${showOs ? `<section class="mc-os-scope" aria-label="${esc(t.name)} operating system"><div class="mc-scope-title">Operating system</div><div class="mc-status-group">${osStatus}<div class="mc-check-line"><span class="mc-check-time">${c?.error ? "Attempt" : "Checked"} ${c ? ago(c.checked_at) : "Never"}</span></div></div>
       ${hasMetrics || reboot ? `<div class="mc-counts os-metrics">${metrics}${reboot ? `<span class="mc-reboot">${reboot}</span>` : rebootSlot}</div>` : ""}
       ${action ? `<div class="mc-footer"><div class="mc-action">${action}</div>${more}</div>` : `<div class="mc-utility-row">${more}</div>`}</section>` : ""}
-      ${hasContainers ? `<section class="mc-containers" aria-label="${esc(t.name)} containers"><div class="mc-scope-title">${containerScope(v)}</div><button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button><div class="mc-container-check muted">${containerCheckTime(v, true)}</div>${dockerCell(v, false)}<div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></section>` : ""}
+      ${hasContainers ? `<section class="mc-containers" aria-label="${esc(t.name)} containers"><div class="mc-scope-title">${containerScope(v)}</div>${showOs && dockerMeta ? `<div class="mc-container-version">${dockerMeta}</div>` : ""}<button class="container-status-hit" data-open-docker="${esc(t.id)}" data-container-filter="all" data-focus-key="container-status:${esc(t.id)}" aria-expanded="${state.containerExpanded.has(t.id)}" aria-label="Container status for ${esc(t.name)}; view details">${containerStatus(v)}</button><div class="mc-container-check muted">${containerCheckTime(v, true)}</div>${dockerCell(v, false)}<div class="scope-actions">${relation.context ? "" : containerRowAction(v)}${rowMenu(v, "containers")}</div></section>` : ""}
       ${backup ? `<div class="mc-details"><div class="mc-detail-line"><span>Backup</span><div class="mc-backup-value">${backup}${backupJobCell(t)}</div></div></div>` : ""}
     </article>`;
   }
@@ -337,11 +338,11 @@ function rowHtml(v, withBackup, relation = {}, mobile = false) {
     if (relation.hasGuests || (t.kind !== "host" && !relation.lastGuest)) detailClasses.push("tree-continues");
     const history = staleCheck(v) ? `<p class="last-known-note">Last known · ${esc(ago(shown.checked_at))}. Check again before installation.</p>` : "";
     const panel = `<div class="packages-panel"><div class="details-panel-heading"><strong>OS updates · ${esc(t.name)}</strong>${detailsCloseButton(t.id, "os")}</div>${history}<div class="packages-table-scroll"><table class="packages-table"><thead><tr><th>Type</th><th>Package</th><th>Installed</th><th>Available</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
-    html += mobile ? `<div class="mc-package-panel" id="packages-${esc(t.id)}">${panel}</div>` : `<tr class="${detailClasses.join(" ")}" id="packages-${esc(t.id)}"><td colspan="${7 + Number(!!withBackup)}">${panel}</td></tr>`;
+    html += mobile ? `<div class="mc-package-panel" id="packages-${esc(t.id)}">${panel}</div>` : `<tr class="${detailClasses.join(" ")}" id="packages-${esc(t.id)}"><td colspan="${6 + Number(!!withBackup)}">${panel}</td></tr>`;
   }
   if (state.containerExpanded.has(t.id) && hasContainers) {
     const panel = stackPanel(v).replace(`id="docker-${esc(t.id)}"`, `id="inline-docker-${esc(t.id)}"`).replaceAll('data-focus-key="container-filter:', 'data-focus-key="inline-container-filter:');
-    html += mobile ? `<div class="mc-container-panel">${panel}</div>` : `<tr class="container-detail"><td colspan="${7 + Number(!!withBackup)}">${panel}</td></tr>`;
+    html += mobile ? `<div class="mc-container-panel">${panel}</div>` : `<tr class="container-detail"><td colspan="${6 + Number(!!withBackup)}">${panel}</td></tr>`;
   }
   return html;
 }
@@ -417,7 +418,7 @@ function render() {
     <div class="group">
       <div class="group-head"><span class="chip">${PLATFORM[g.platform] || g.platform}</span> ${esc(g.title)}</div>
       <div class="group-scroll"><table class="machine-table${externalActions ? " has-manager-actions" : ""}${withBackup ? " has-backup" : ""}${containersVisible() ? " has-containers" : ""}" aria-label="${esc(g.title)} machines">
-        <colgroup><col class="col-select"><col class="col-machine"><col class="col-scope"><col class="col-status"><col class="col-updates"><col class="col-checked">${withBackup ? '<col class="col-backup">' : ""}<col class="col-actions"></colgroup>
+        <colgroup><col class="col-select"><col class="col-machine"><col class="col-status"><col class="col-updates"><col class="col-checked">${withBackup ? '<col class="col-backup">' : ""}<col class="col-actions"></colgroup>
         ${machineTableHead(withBackup)}
         ${rows}
       </table></div>

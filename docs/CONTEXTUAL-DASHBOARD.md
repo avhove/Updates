@@ -8,9 +8,10 @@ The dashboard supports three views with one consistent table:
 - **Machines** shows OS rows and OS package details only.
 - **Containers** shows container hosts, container rows and container details only.
 
-Machine identity, selection and optional backup context span both rows in All. The machine's
+In All, machine identity and selection belong to the OS row. A nested Containers identity row
+connects below it using the same curved hierarchy; optional backup context still spans both rows. The machine's
 second line contains only its OS; type and policy badges stay beside its name. A single header
-reads Machine, Scope, Status, Updates, Checked, Backup (when available), Actions. **Machine information** is available in each per-machine **…** menu. A container row has its own manager symbol, status,
+reads Machine, Status, Updates, Checked, Backup (when available), Actions. **Machine information** is available in each per-machine **…** menu. A container row has its own manager symbol, status,
 independent update/review/coverage/failure metrics, check ages and provider-specific action.
 The **Update** button keeps its name and appears exclusively on the OS row. Native Docker details open through the status or update counters,
 with the existing confirmed **Update stack** action inside details; external
@@ -907,3 +908,33 @@ column alignment. Up-to-date status and the clickable status/details action rema
 The redundant native **View stacks** button is removed from desktop rows and mobile cards.
 Status and metric buttons, plus the existing View container details menu item, retain access
 to container details; provider update actions and the More menu are unchanged.
+
+
+## Working preview: nested container identity and Docker Engine version
+
+In All, the machine column has separate OS and Containers cells. The container identity is
+nested one level below its machine, with a continuous cluster trunk behind it where needed.
+OS selection remains on the OS row. Machines stays OS-only; Containers uses one identity row
+with the Docker version in its secondary line. Mobile cards retain their existing sections.
+
+The engine version is optional metadata, displayed as Docker followed by the reported version.
+Native scans collect it from the Docker info call already made during an allowed container
+check. Dockhand report polling also reads GET /api/system?env=ID and retains only the reported
+Docker engine version. This metadata read does not trigger registry checks, pulls or deployment.
+Missing, denied, older or malformed metadata leaves the version absent without failing container
+reports. Ordinary OS checks still do not call the Docker daemon. Dockhand mappings continue to
+block native Docker jobs. Provider selection and check/install permissions are unchanged.
+
+The separate Scope column is removed: Containers and its provider indicator live in the
+nested identity cell (or beside the machine identity in Containers view). Each row retains
+independent status, counters, check time and actions. The container branch uses a runtime
+status dot: a confirmed stopped host is immediately red; a successful engine report is
+green; missing/stale reports or an unreachable host are grey. Tooltips identify the last
+report, rather than implying a new live probe. Image update availability does not set this dot.
+
+Only the nested container connector uses the container action blue; the cluster trunk stays purple.
+
+Desktop provider labels use a neutral rounded tag: Fleetdeck, Fleetdeck · monitor only,
+Dockhand, or the configured external manager name. Mobile retains provider icons only,
+with accessible descriptions. The Checked column gives 12 pixels to Backup so backup ages
+and the schedule icon have more room; row-specific timestamps and actions are unchanged.
