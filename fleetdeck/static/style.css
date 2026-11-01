@@ -1404,3 +1404,8 @@ a.brand { color: var(--text); text-decoration: none; }
 @media (min-width: 1120px) {
   .dashboard-page .machine-table.containers-only tr.first-guest .machine-cell::after { top: 0; }
 }
+
+/* Unknown engine state keeps the same dot silhouette as confirmed states. */
+.dashboard-page .container-engine-state .dot:not(.on):not(.off) {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 20%, transparent);
+}

@@ -49,7 +49,7 @@ function containerStatus(v) {
   const policy = dockerSettings(v), s = containerSummary(v);
   let symbol = "help", label = "Not checked", tone = "muted";
   if (policy.mode === "disabled") label = "Disabled";
-  else if (!v.dockhand && !dockerEnabled(v)) { symbol = null; label = "Monitored externally"; }
+  else if (!v.dockhand && !dockerEnabled(v)) { symbol = "external"; label = "Monitored externally"; }
   else if (v.active_job?.action === "dockhand-update") return '<span class="status-inline muted"><span class="spin"></span>Updating containers…</span>';
   else if (s.checking) return '<span class="status-inline muted"><span class="spin"></span>Checking containers…</span>';
   else if (v.target.status === "stopped") { symbol = "power"; label = "Not running"; tone = "unavailable"; }

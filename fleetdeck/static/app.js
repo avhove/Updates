@@ -489,9 +489,10 @@ function openMachineMenu(id, trigger) {
     (!containerOnly && t.can_backup ? action("backup", "Back up configuration", "backup", !busy) : "") +
     (!containerOnly ? `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>` : "") +
     (!containerOnly && canUpgrade(t) ? `<button data-cmd="${esc(id)}" title="${esc(v.update_command ? `Update runs: ${v.update_command}` : "Use the machine's own update command instead of the built-in OS upgrade")}">${icon("terminal")}Update command…</button>` : "") +
-    (!containerOnly || dockerEnabled(v) ? `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` : "") +
+    (!containerOnly ? `<button data-monitor="${v.monitor_only ? "0" : "1"}" data-id="${esc(id)}" ${t.monitor_only ? "disabled" : ""} title="${t.monitor_only ? "Set to monitor only in configuration" : v.monitor_only ? "Allow OS and native container updates again" : "Keep checking; block OS and native container updates"}">${icon(v.monitor_only ? "download" : "eye")}${v.monitor_only ? "Allow updates" : "Monitor only"}</button>` : "") +
     (!containerOnly && state.console?.enabled && !["stopped", "offline"].includes(t.status) ? `<button data-run="${esc(id)}">${icon("terminal")}Run command</button>` : "") +
     (containerOnly ? `<button data-open-docker="${esc(id)}" data-container-filter="all">${icon("list")}${!v.dockhand && !dockerEnabled(v) ? "View management details" : "View container details"}</button>` : `<button data-hide="${v.hidden ? "0" : "1"}" data-id="${esc(id)}">${icon(v.hidden ? "eye" : "eyeOff")}${v.hidden ? "Unhide machine" : "Hide machine"}</button>`);
+  if (containerOnly && state.view === "containers") menu.innerHTML += `<button data-docker-settings="${esc(id)}">${icon("settings")}Docker management</button>`;
   if (!containerOnly) menu.innerHTML += `<div class="dashboard-menu-divider"></div>${machineInfoButton(t, v.check)}`;
   machineMenuId = id;
   machineMenuFocus = trigger.dataset.focusKey;

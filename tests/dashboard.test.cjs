@@ -1591,7 +1591,7 @@ test("link-only managers have no monitoring controls or cached native update cou
     assert.equal(doc.querySelectorAll('.container-metric-hit').length, 0);
     const externalStatus = doc.querySelector('.container-status-hit');
     assert.match(externalStatus.textContent, /Monitored externally/);
-    assert.equal(externalStatus.querySelector('svg'), null);
+    assert.ok(externalStatus.querySelector('svg'));
     const managerLink = doc.querySelector('a.docker-status-link');
     assert.equal(managerLink.getAttribute('href'), 'https://manager.example');
     assert.match(managerLink.textContent, /Test manager/);
@@ -1614,11 +1614,11 @@ test("link-only managers have no monitoring controls or cached native update cou
   }
 });
 
-test("native container menus keep monitor control and external managers without a URL stay neutral", async () => {
+test("native container menus omit VM-wide monitor control and external managers without a URL stay neutral", async () => {
   const ui = await dashboard({ targets: [machine('native-monitor', { check: { docker_installed: true } }),
     machine('no-link', { view: { docker_settings: { mode: 'external', manager_name: 'External manager' } } })] });
   ui.click('[data-machine-menu="native-monitor"][data-menu-scope="containers"]');
-  assert.ok(ui.document.querySelector('#machine-actions [data-monitor]'));
+  assert.equal(ui.document.querySelector('#machine-actions [data-monitor]'), null);
   assert.ok(ui.document.querySelector('#machine-actions [data-act="stacks"]'));
   const row = ui.document.querySelector('.container-row[data-machine-row="no-link"]') || ui.document.querySelector('[data-machine-row="no-link"]').parentNode.querySelector('.container-row');
   assert.equal(row.querySelector('.scope-actions [data-docker-settings], .scope-actions a'), null);
@@ -2054,4 +2054,21 @@ test("Containers marks its tree scope and missing backup ages remain blank", asy
   }
   ui.setView('all');
   assert.equal(ui.document.querySelector('.containers-only'), null);
+});
+
+
+test("Containers view exposes per-machine Docker management without OS-only menu entries", async () => {
+  for (const mobile of [false, true]) {
+    const ui = await dashboard({ mobile, targets: [machine('settings-host', { check: { docker_installed: true } })] });
+    ui.setView('all');
+    ui.click('[data-machine-menu="settings-host"][data-menu-scope="containers"]');
+    assert.equal(ui.document.querySelector('#machine-actions [data-docker-settings]'), null);
+    ui.setView('containers');
+    ui.click('[data-machine-menu="settings-host"][data-menu-scope="containers"]');
+    const menu = ui.document.querySelector('#machine-actions');
+    assert.equal(menu.querySelector('[data-docker-settings]').getAttribute('data-docker-settings'), 'settings-host');
+    assert.ok(menu.querySelector('button:last-child').hasAttribute('data-docker-settings'));
+    assert.equal(menu.querySelector('[data-machine-info],[data-monitor],[data-cmd],[data-act="check"],[data-act="reboot"]'), null);
+    assert.equal(ui.calls.some(c => c.method === 'POST'), false);
+  }
 });
